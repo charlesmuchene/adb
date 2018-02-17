@@ -45,8 +45,10 @@ object Adb {
      */
     fun addDevice(device: UsbDevice) {
         val usbInterface = device.getAdbInterface() ?: return
-        val connection = usbManager.openDevice(device)
-        devices[device.deviceName] = AdbDevice(usbInterface, connection)
+        val connection = usbManager.openDevice(device) ?: return
+        val success = connection.claimInterface(usbInterface, true)
+        if (success) devices[device.deviceName] = AdbDevice(usbInterface, connection)
+        else connection.close()
     }
 
     /**
@@ -55,7 +57,8 @@ object Adb {
      * @param device [UsbDevice] to remove
      */
     fun removeDevice(device: UsbDevice) {
-        devices.remove(device.deviceName)
+        val adbDevice = devices.remove(device.deviceName) ?: return
+        adbDevice.close()
     }
 
 }

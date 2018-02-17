@@ -24,7 +24,7 @@ import com.charlesmuchene.adb.utilities.getBulkEndpoints
 /**
  * Adb device
  */
-class AdbDevice(usbInterface: UsbInterface, private val connection: UsbDeviceConnection)
+class AdbDevice(private val usbInterface: UsbInterface, private val connection: UsbDeviceConnection)
     : AdbInterface {
 
     private val inEndpoint: UsbEndpoint
@@ -34,6 +34,22 @@ class AdbDevice(usbInterface: UsbInterface, private val connection: UsbDeviceCon
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
         inEndpoint = inEp ?: throw IllegalStateException("Adb requires a non-null IN endpoint")
         outEndpoint = outEp ?: throw IllegalStateException("Adb requires a non-null OUT endpoint")
+    }
+
+    /**
+     * Connect to the device
+     */
+    private fun connect() {
+        // TODO Connect
+    }
+
+    /**
+     * Close the adb device
+     */
+    fun close() {
+        // TODO Stop all ongoing actions
+        connection.releaseInterface(usbInterface)
+        connection.close()
     }
 
     override fun push(localPath: String, remotePath: String) {
