@@ -3,6 +3,8 @@
           xmlns:tools="http://schemas.android.com/tools"
           package="com.charlesmuchene.adb">
 
+    <uses-feature android:name="android.hardware.usb.host" />
+
     <application
         android:name=".AdbApplication"
         android:allowBackup="true"
@@ -12,12 +14,21 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         tools:ignore="AllowBackup,GoogleAppIndexingWarning">
-        <activity android:name=".HomeActivity">
+        <activity
+            android:name=".ui.HomeActivity"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
 
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
+            </intent-filter>
+
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter"/>
         </activity>
     </application>
 
