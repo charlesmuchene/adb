@@ -1,4 +1,4 @@
-/* Copyright 2018 Charles Muchene
+/* Copyright (C) 2018 Charles Muchene
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,18 +13,36 @@
  * limitations under the License.
  */
 
-package com.charlesmuchene.adb
+package com.charlesmuchene.adb.ui
 
+import android.content.IntentFilter
+import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
+import com.charlesmuchene.adb.R
+import com.charlesmuchene.adb.receivers.UsbConnectionReceiver
 
 /**
  * Home screen
  */
 class HomeActivity : AppCompatActivity() {
 
+    private val usbConnectionReceiver = UsbConnectionReceiver()
+    private val usbConnectionIntentFilter = IntentFilter().apply {
+        addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
+
+        registerReceiver(usbConnectionReceiver, usbConnectionIntentFilter)
+
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(usbConnectionReceiver)
     }
 }

@@ -13,28 +13,27 @@
  * limitations under the License.
  */
 
-package com.charlesmuchene.adb
-
-import android.app.Application
-import com.charlesmuchene.adb.utilities.Adb
-import timber.log.Timber
+package com.charlesmuchene.adb.interfaces
 
 /**
- * Adb application
+ * Adb interface.
+ *
+ * Defines adb 'actions' that an [AdbDevice] can perform
  */
-class AdbApplication: Application() {
+interface AdbInterface {
+    /**
+     * Push a file to connect adb device
+     *
+     * @param localPath Path of the local file
+     * @param remotePath Path of the remote file
+     */
+    fun push(localPath: String, remotePath: String)
 
-    override fun onCreate() {
-        super.onCreate()
-
-        Adb.initialize(this)
-
-        Timber.plant(Timber.DebugTree())
-    }
-
-    companion object {
-        init {
-            System.loadLibrary("adb")
-        }
-    }
+    /**
+     * Install an apk to the connected adb device
+     *
+     * @param apkPath Path of the apk on the host
+     * @param install `true` to install the apk otherwise just install
+     */
+    fun install(apkPath: String, install: Boolean)
 }
