@@ -43,9 +43,10 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      */
     fun connect() {
         val connectMessage = AdbMessage.generateConnectMessage()
+        logd("Connection message: $connectMessage")
         write(connectMessage)
 
-        val authMessage = read()
+        val authMessage = read(44)
         logd(authMessage.toString())
     }
 
@@ -97,7 +98,8 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * @param data Data buffer
      */
     private fun transfer(data: ByteArray, length: Int = data.size) {
-        connection.bulkTransfer(outEndpoint, data, length, 10)
+        val transferredBytes = connection.bulkTransfer(outEndpoint, data, length, 10)
+        logd("Transferred ${(transferredBytes / length) * 100}% of payload")
     }
 
     /**

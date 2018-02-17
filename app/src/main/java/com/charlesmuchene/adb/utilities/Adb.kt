@@ -73,4 +73,11 @@ object Adb {
         usbManager.deviceList.values.forEach(this::addDevice)
     }
 
+    /**
+     * Close all devices
+     */
+    fun disconnect() {
+        devices.values.forEach { it.close() }
+    }
+
 }

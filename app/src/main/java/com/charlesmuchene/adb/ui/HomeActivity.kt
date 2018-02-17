@@ -39,13 +39,14 @@ class HomeActivity : AppCompatActivity() {
         setContentView(R.layout.activity_home)
 
         Adb.addExistingDevices()
-        
+
         registerReceiver(usbConnectionReceiver, usbConnectionIntentFilter)
 
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        Adb.disconnect()
         unregisterReceiver(usbConnectionReceiver)
     }
 }

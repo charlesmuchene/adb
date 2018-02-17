@@ -100,7 +100,7 @@ class AdbMessage() {
      *
      * @return Total message payload (header + data)
      */
-    fun getTotalPayload() = headerBuffer.array() + dataBuffer.array()
+    fun getTotalPayload() = headerBuffer.array() + dataBuffer.array().copyOfRange(0, dataLength)
 
     /**
      * Set up the message with a byte array payload
