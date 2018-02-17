@@ -15,9 +15,7 @@
 
 package com.charlesmuchene.adb.models
 
-import com.charlesmuchene.adb.utilities.MAX_BUFFER_PAYLOAD
-import com.charlesmuchene.adb.utilities.MESSAGE_DATA_PAYLOAD
-import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_PAYLOAD
+import com.charlesmuchene.adb.utilities.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -26,24 +24,54 @@ import java.nio.ByteOrder
  */
 class AdbMessage() {
 
+    /**
+     * Message header buffer
+     */
     val headerBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_HEADER_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
+    /**
+     * Data payload buffer
+     */
     val dataBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_DATA_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
+    /**
+     * Command
+     */
     val command: Int
         get() = headerBuffer.getInt(0)
 
+    /**
+     * Argument zero
+     */
     val argumentZero: Int
         get() = headerBuffer.getInt(4)
 
+    /**
+     * Argument one
+     */
     val argumentOne: Int
         get() = headerBuffer.getInt(8)
 
+    /**
+     * Length of the data payload
+     */
     private val dataLength: Int
         get() = headerBuffer.getInt(12)
 
+    /**
+     * Data payload as string
+     */
+    private val dataPayloadAsString: String?
+        get() = if (dataLength == 0) null
+        else String(dataBuffer.array(), 0, dataLength - 1)
+
+    /**
+     * Constructor
+     *
+     * @param payload [ByteArray] to construct the message with
+     */
     constructor(payload: ByteArray) : this() {
         headerBuffer.put(payload.copyOfRange(0, MESSAGE_HEADER_PAYLOAD))
         if (hasDataPayload())
@@ -144,6 +172,43 @@ class AdbMessage() {
             result += element
         }
         return result
+    }
+
+    /**
+     * Extract a string from the header buffer
+     *
+     * @param offset Starting index on the buffer
+     * @param length Length of the read
+     * @return The read string
+     */
+    private fun readString(offset: Int = 0, length: Int = 4): String {
+        var mark = offset
+        val data = ByteArray(length)
+        for (index in 0 until length)
+            data[index] = headerBuffer.get(mark++)
+        return String(data)
+    }
+
+    override fun toString(): String {
+        val commandName = readString()
+        var string = "Message: $commandName Arg0: $argumentZero Arg1: $argumentOne " +
+                "DataLength: $dataLength"
+        if (hasDataPayload()) string += " Data: $dataPayloadAsString"
+
+        return string
+    }
+
+    companion object {
+
+        /**
+         * Generate a connect message
+         */
+        fun generateConnectMessage(): AdbMessage {
+            val message = AdbMessage()
+            message[A_CNXN, A_VERSION, MESSAGE_DATA_PAYLOAD] = "host::charlo"
+            return message
+        }
+
     }
 
 }

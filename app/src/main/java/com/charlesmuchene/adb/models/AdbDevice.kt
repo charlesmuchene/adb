@@ -21,6 +21,7 @@ import android.hardware.usb.UsbInterface
 import com.charlesmuchene.adb.interfaces.AdbInterface
 import com.charlesmuchene.adb.utilities.MAX_BUFFER_PAYLOAD
 import com.charlesmuchene.adb.utilities.getBulkEndpoints
+import com.charlesmuchene.adb.utilities.logd
 
 /**
  * Adb device
@@ -41,7 +42,11 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * Connect to the device
      */
     fun connect() {
-        // TODO Connect
+        val connectMessage = AdbMessage.generateConnectMessage()
+        write(connectMessage)
+
+        val authMessage = read()
+        logd(authMessage.toString())
     }
 
     /**

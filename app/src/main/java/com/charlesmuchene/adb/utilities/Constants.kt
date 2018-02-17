@@ -16,6 +16,11 @@
 package com.charlesmuchene.adb.utilities
 
 /**
+ * Supported adb protocol version
+ */
+const val A_VERSION = 0x01000000
+
+/**
  * Maximum payload constants
  */
 const val MAX_BUFFER_PAYLOAD = 16_384

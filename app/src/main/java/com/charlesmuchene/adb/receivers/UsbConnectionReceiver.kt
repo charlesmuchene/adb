@@ -33,8 +33,10 @@ class UsbConnectionReceiver : BroadcastReceiver() {
         val action = intent.action
         val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE) ?: return
 
-        if (action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED) Adb.addDevice(device)
-        else if (action == UsbManager.ACTION_USB_ACCESSORY_DETACHED) Adb.removeDevice(device)
+        if (action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED)
+            Adb.addDevice(device)
+        else if (action == UsbManager.ACTION_USB_ACCESSORY_DETACHED)
+            Adb.removeDevice(device)
 
     }
 
