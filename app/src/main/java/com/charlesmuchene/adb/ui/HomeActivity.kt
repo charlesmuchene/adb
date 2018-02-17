@@ -21,6 +21,7 @@ import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import com.charlesmuchene.adb.R
 import com.charlesmuchene.adb.receivers.UsbConnectionReceiver
+import com.charlesmuchene.adb.utilities.Adb
 
 /**
  * Home screen
@@ -37,6 +38,8 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
 
+        Adb.addExistingDevices()
+        
         registerReceiver(usbConnectionReceiver, usbConnectionIntentFilter)
 
     }

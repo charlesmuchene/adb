@@ -51,8 +51,7 @@ object Adb {
             val adbDevice = AdbDevice(usbInterface, connection)
             devices[device.deviceName] = adbDevice
             adbDevice.connect()
-        }
-        else {
+        } else {
             connection.close()
         }
     }
@@ -65,6 +64,13 @@ object Adb {
     fun removeDevice(device: UsbDevice) {
         val adbDevice = devices.remove(device.deviceName) ?: return
         adbDevice.close()
+    }
+
+    /**
+     * Enumerate and add already connected adb devices
+     */
+    fun addExistingDevices() {
+        usbManager.deviceList.values.forEach(this::addDevice)
     }
 
 }
