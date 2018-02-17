@@ -24,12 +24,12 @@ import java.nio.ByteOrder
 /**
  * Adb message
  */
-class AdbMessage {
+class AdbMessage() {
 
-    val headerBuffer = ByteBuffer.allocate(MESSAGE_HEADER_PAYLOAD)
+    val headerBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_HEADER_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
-    val dataBuffer = ByteBuffer.allocate(MESSAGE_DATA_PAYLOAD)
+    val dataBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_DATA_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     val command: Int
@@ -41,8 +41,14 @@ class AdbMessage {
     val argumentOne: Int
         get() = headerBuffer.getInt(8)
 
-    val dataLength: Int
+    private val dataLength: Int
         get() = headerBuffer.getInt(12)
+
+    constructor(payload: ByteArray) : this() {
+        headerBuffer.put(payload.copyOfRange(0, MESSAGE_HEADER_PAYLOAD))
+        if (hasDataPayload())
+            dataBuffer.put(payload, MESSAGE_HEADER_PAYLOAD, payload.size)
+    }
 
     /**
      * Check if message has data payload

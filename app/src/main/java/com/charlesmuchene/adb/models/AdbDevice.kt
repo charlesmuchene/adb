@@ -54,11 +54,11 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
     }
 
     /**
-     * Send data to device
+     * Write data to device
      *
      * @param message Payload to send
      */
-    private fun send(message: AdbMessage) {
+    private fun write(message: AdbMessage) {
         if (message.isSmallPayload()) {
             transfer(message.getTotalPayload())
         } else {
@@ -79,7 +79,7 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
         val chunks = (size / MAX_BUFFER_PAYLOAD) + if (size % MAX_BUFFER_PAYLOAD != 0) 1 else 0
         val stream = data.inputStream()
 
-        for (chunk in 0..chunks) {
+        for (chunk in 0 until chunks) {
             val length = stream.read(payload)
             if (length != -1)
                 transfer(payload, length)
@@ -92,7 +92,21 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * @param data Data buffer
      */
     private fun transfer(data: ByteArray, length: Int = data.size) {
-        connection.bulkTransfer(outEndpoint, data, length, 100)
+        connection.bulkTransfer(outEndpoint, data, length, 10)
+    }
+
+    /**
+     * Read payload from device
+     *
+     * @param length The length of data to read. Defaults to [MAX_BUFFER_PAYLOAD].
+     * @return [AdbMessage] as the read payload
+     */
+    private fun read(length: Int = MAX_BUFFER_PAYLOAD): AdbMessage? {
+        val payload = ByteArray(length)
+        val bytesRead = connection.bulkTransfer(inEndpoint, payload, length, 10)
+        if (bytesRead <= 0) return null
+        val array = if (bytesRead < length) payload.copyOfRange(0, bytesRead) else payload
+        return AdbMessage(array)
     }
 
     override fun push(localPath: String, remotePath: String) {
