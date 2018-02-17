@@ -27,6 +27,7 @@ task clean(type: Delete) {
 
 ext {
     junitVersion = '4.12'
+    timberVersion = '4.5.1'
     espressoVersion = '3.0.1'
     testRunnerVersion = '1.0.1'
     constraintVersion = '1.0.2'

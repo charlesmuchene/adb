@@ -46,4 +46,7 @@ dependencies {
     implementation "com.android.support:appcompat-v7:$supportLibVersion"
     implementation "com.android.support.constraint:constraint-layout:$constraintVersion"
 
+    // Logs
+    implementation "com.jakewharton.timber:timber:$timberVersion"
+
 }

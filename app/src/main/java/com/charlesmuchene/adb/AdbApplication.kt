@@ -1,4 +1,4 @@
-/* Copyright 2018 Charles Muchene
+/* Copyright (C) 2018 Charles Muchene
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package com.charlesmuchene.adb
 
 import android.app.Application
+import timber.log.Timber
 
 /**
  * Adb application
@@ -27,6 +28,7 @@ class AdbApplication: Application() {
     override fun onCreate() {
         super.onCreate()
         initializeAdb()
+        Timber.plant(Timber.DebugTree())
     }
 
     companion object {
