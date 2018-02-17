@@ -21,9 +21,13 @@ package com.charlesmuchene.adb.utilities
 const val MAX_BUFFER_PAYLOAD = 16_384
 
 /**
- * Adb message constants
+ * Adb message header payload
  */
 const val MESSAGE_HEADER_PAYLOAD = 24
+
+/**
+ * Adb data payload
+ */
 const val MESSAGE_DATA_PAYLOAD = 65_536
 
 /**

@@ -15,6 +15,7 @@
 
 package com.charlesmuchene.adb.models
 
+import com.charlesmuchene.adb.utilities.MAX_BUFFER_PAYLOAD
 import com.charlesmuchene.adb.utilities.MESSAGE_DATA_PAYLOAD
 import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_PAYLOAD
 import java.nio.ByteBuffer
@@ -25,22 +26,47 @@ import java.nio.ByteOrder
  */
 class AdbMessage {
 
-    private val messageBuffer = ByteBuffer.allocate(MESSAGE_HEADER_PAYLOAD)
+    val headerBuffer = ByteBuffer.allocate(MESSAGE_HEADER_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
-    private val dataBuffer = ByteBuffer.allocate(MESSAGE_DATA_PAYLOAD)
+
+    val dataBuffer = ByteBuffer.allocate(MESSAGE_DATA_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     val command: Int
-        get() = messageBuffer.getInt(0)
+        get() = headerBuffer.getInt(0)
 
     val argumentZero: Int
-        get() = messageBuffer.getInt(4)
+        get() = headerBuffer.getInt(4)
 
     val argumentOne: Int
-        get() = messageBuffer.getInt(8)
+        get() = headerBuffer.getInt(8)
 
     val dataLength: Int
-        get() = messageBuffer.getInt(12)
+        get() = headerBuffer.getInt(12)
+
+    /**
+     * Check if message has data payload
+     *
+     * @return `true` if this message has a data payload, `false` otherwise
+     */
+    fun hasDataPayload() = dataLength > 0
+
+    /**
+     * Determine if this message is a small payload. A small payload
+     * is efficient to send in adb since the header can be sent together
+     * with the data payload in one go.
+     *
+     * @return `true` if the total message payload <= [MAX_BUFFER_PAYLOAD], `false`
+     * otherwise
+     */
+    fun isSmallPayload() = (MESSAGE_HEADER_PAYLOAD + dataLength) <= MAX_BUFFER_PAYLOAD
+
+    /**
+     * Get the total message payload
+     *
+     * @return Total message payload (header + data)
+     */
+    fun getTotalPayload() = headerBuffer.array() + dataBuffer.array()
 
     /**
      * Set up the message with a byte array payload
@@ -51,7 +77,7 @@ class AdbMessage {
      * @param data Data payload as a [ByteArray]
      */
     operator fun set(command: Int, argumentZero: Int, argumentOne: Int, data: ByteArray?) {
-        with(messageBuffer) {
+        with(headerBuffer) {
             putInt(0, command)
             putInt(4, argumentZero)
             putInt(8, argumentOne)
@@ -113,5 +139,5 @@ class AdbMessage {
         }
         return result
     }
-    
+
 }
