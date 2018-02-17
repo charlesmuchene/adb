@@ -25,7 +25,7 @@ import com.charlesmuchene.adb.models.AdbDevice
  */
 object Adb {
 
-    val devices = mutableListOf<AdbDevice>()
+    val devices = HashMap<String, AdbDevice>()
 
     private lateinit var usbManager: UsbManager
 
@@ -46,8 +46,7 @@ object Adb {
     fun addDevice(device: UsbDevice) {
         val usbInterface = device.getAdbInterface() ?: return
         val connection = usbManager.openDevice(device)
-
-        devices.add(AdbDevice(usbInterface, connection))
+        devices[device.deviceName] = AdbDevice(usbInterface, connection)
     }
 
     /**
@@ -56,8 +55,7 @@ object Adb {
      * @param device [UsbDevice] to remove
      */
     fun removeDevice(device: UsbDevice) {
-
-        // TODO remove device
+        devices.remove(device.deviceName)
     }
 
 }
