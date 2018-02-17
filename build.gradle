@@ -1,0 +1,34 @@
+buildscript {
+    ext{
+        kotlinVersion = '1.2.21'
+        androidGradleVersion = '3.0.1'
+    }
+
+    repositories {
+        google()
+        jcenter()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+        classpath "com.android.tools.build:gradle:$androidGradleVersion"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        jcenter()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+ext {
+    junitVersion = '4.12'
+    espressoVersion = '3.0.1'
+    testRunnerVersion = '1.0.1'
+    constraintVersion = '1.0.2'
+    supportLibVersion = '27.0.2'
+}
