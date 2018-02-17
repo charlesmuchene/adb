@@ -39,7 +39,7 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
     /**
      * Connect to the device
      */
-    private fun connect() {
+    fun connect() {
         // TODO Connect
     }
 

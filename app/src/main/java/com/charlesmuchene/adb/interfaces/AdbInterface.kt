@@ -15,12 +15,15 @@
 
 package com.charlesmuchene.adb.interfaces
 
+import com.charlesmuchene.adb.models.AdbDevice
+
 /**
  * Adb interface.
  *
  * Defines adb 'actions' that an [AdbDevice] can perform
  */
 interface AdbInterface {
+
     /**
      * Push a file to connect adb device
      *
