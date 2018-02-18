@@ -32,6 +32,8 @@ android {
     }
 }
 
+kotlin { experimental { coroutines 'enable' } }
+
 dependencies {
 
     // Test deps
@@ -48,5 +50,8 @@ dependencies {
 
     // Logs
     implementation "com.jakewharton.timber:timber:$timberVersion"
+
+    // Coroutine
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutineVersion"
 
 }

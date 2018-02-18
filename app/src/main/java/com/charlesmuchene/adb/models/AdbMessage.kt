@@ -30,45 +30,51 @@ class AdbMessage {
     /**
      * Message header buffer
      */
-    val headerBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_HEADER_LENGTH)
+    val header: ByteBuffer = ByteBuffer.allocate(MESSAGE_HEADER_LENGTH)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     /**
      * Data payload buffer
      */
-    private val dataBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_PAYLOAD)
+    val payload: ByteBuffer = ByteBuffer.allocate(MESSAGE_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     /**
      * Command
      */
     val command: Int
-        get() = headerBuffer.getInt(0)
+        get() = header.getInt(0)
 
     /**
      * Argument zero
      */
     val argumentZero: Int
-        get() = headerBuffer.getInt(4)
+        get() = header.getInt(4)
 
     /**
      * Argument one
      */
     val argumentOne: Int
-        get() = headerBuffer.getInt(8)
+        get() = header.getInt(8)
 
     /**
      * Length of the data payload
      */
-    private val dataLength: Int
-        get() = headerBuffer.getInt(12)
+    val dataLength: Int
+        get() = header.getInt(12)
+
+    /**
+     * Inverse of the command integer
+     */
+    private val magic: Int
+        get() = header.getInt(20)
 
     /**
      * Data payload as string
      */
     private val dataPayloadAsString: String?
         get() = if (dataLength <= 0 || dataLength >= MESSAGE_PAYLOAD) null
-        else String(dataBuffer.array(), 0, dataLength - 1)
+        else String(payload.array(), 0, dataLength - 1)
 
     constructor()
 
@@ -78,9 +84,9 @@ class AdbMessage {
      * @param payload [ByteArray] to construct the message with
      */
     constructor(payload: ByteArray) {
-        headerBuffer.put(payload, 0, MESSAGE_HEADER_LENGTH)
-//        if (hasDataPayload())
-//            dataBuffer.put(payload, MESSAGE_HEADER_LENGTH, payload.size)
+        header.put(payload, 0, MESSAGE_HEADER_LENGTH)
+//        if (hasPayload())
+//            payload.put(payload, MESSAGE_HEADER_LENGTH, payload.size)
     }
 
     /**
@@ -88,7 +94,7 @@ class AdbMessage {
      *
      * @return `true` if this message has a data payload, `false` otherwise
      */
-    fun hasDataPayload() = dataLength > 0
+    fun hasPayload() = dataLength > 0
 
     /**
      * Get the message's payload
@@ -98,8 +104,8 @@ class AdbMessage {
     fun getPayload(): ByteArray {
         return when {
             dataLength <= 0 -> return ByteArray(0)
-            dataLength == MESSAGE_PAYLOAD -> dataBuffer.array()
-            else -> dataBuffer.array().copyOfRange(0, dataLength)
+            dataLength == MESSAGE_PAYLOAD -> payload.array()
+            else -> payload.array().copyOfRange(0, dataLength)
         }
     }
 
@@ -112,7 +118,7 @@ class AdbMessage {
      * @param data Data payload as a [ByteArray]
      */
     operator fun set(command: Int, argumentZero: Int, argumentOne: Int, data: ByteArray?) {
-        with(headerBuffer) {
+        with(header) {
             putInt(0, command)
             putInt(4, argumentZero)
             putInt(8, argumentOne)
@@ -121,7 +127,7 @@ class AdbMessage {
             putInt(20, command.inv())
         }
 
-        if (data != null) dataBuffer.put(data, 0, data.size)
+        if (data != null) payload.put(data, 0, data.size)
     }
 
     /**
@@ -175,6 +181,13 @@ class AdbMessage {
         return result
     }
 
+    fun isValid(): Boolean {
+        // TODO Simplify and document
+        if (command != magic xor -0x1)
+            return false
+        return true
+    }
+
     /**
      * Extract a string from the header buffer
      *
@@ -183,15 +196,15 @@ class AdbMessage {
      * @return The read string
      */
     private fun readString(offset: Int = 0, length: Int = 4): String {
-        headerBuffer.clear()
-        return String(headerBuffer.array(), offset, length)
+        header.clear()
+        return String(header.array(), offset, length)
     }
 
     override fun toString(): String {
         val commandName = readString()
         var string = "Message: $commandName Arg0: $argumentZero Arg1: $argumentOne " +
                 "DataLength: $dataLength"
-        if (hasDataPayload()) string += " Data: $dataPayloadAsString"
+        if (hasPayload()) string += " Data: $dataPayloadAsString"
 
         return string
     }

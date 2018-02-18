@@ -18,13 +18,17 @@ package com.charlesmuchene.adb.models
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
+import android.hardware.usb.UsbRequest
+import android.os.Build
 import com.charlesmuchene.adb.interfaces.AdbInterface
 import com.charlesmuchene.adb.utilities.MAX_BUFFER_LENGTH
 import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_LENGTH
 import com.charlesmuchene.adb.utilities.getBulkEndpoints
 import com.charlesmuchene.adb.utilities.logd
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.runBlocking
+import java.util.*
+import kotlin.concurrent.thread
 
 /**
  * Adb device
@@ -34,6 +38,33 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
 
     private val inEndpoint: UsbEndpoint
     private val outEndpoint: UsbEndpoint
+    private val inRequestPool = LinkedList<UsbRequest>()
+    private val outRequestPool = LinkedList<UsbRequest>()
+
+    private val outRequest: UsbRequest
+        get() = synchronized(outRequestPool) {
+            return if (outRequestPool.isEmpty())
+                UsbRequest().apply { initialize(connection, outEndpoint) }
+            else outRequestPool.removeFirst()
+        }
+
+    private val inRequest: UsbRequest
+        get() = synchronized(inRequestPool) {
+            return if (inRequestPool.isEmpty())
+                UsbRequest().apply { initialize(connection, inEndpoint) }
+            else inRequestPool.removeFirst()
+        }
+
+    /**
+     * Adb thread
+     */
+    private val adbThread = thread {
+        runBlocking {
+            launch {
+                readAdbMessage()
+            }.join()
+        }
+    }
 
     init {
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
@@ -70,8 +101,8 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * TODO Perform in aux thread
      */
     private fun write(message: AdbMessage) {
-        transfer(message.headerBuffer.array())
-        if (message.hasDataPayload())
+        transfer(message.header.array())
+        if (message.hasPayload())
             sendLargePayload(message.getPayload())
     }
 
@@ -116,21 +147,106 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * TODO Perform in aux thread
      */
     private fun read(): AdbMessage? {
-        // Read message header
-        val header = ByteBuffer.allocate(MESSAGE_HEADER_LENGTH).order(ByteOrder.LITTLE_ENDIAN)
-        var dataRead = 0
-        do {
-            val bytesRead = connection.bulkTransfer(inEndpoint, header.array(), dataRead,
-                    MESSAGE_HEADER_LENGTH - dataRead, 10)
-            if (bytesRead <= 0) return null
-            dataRead += bytesRead
-        } while (dataRead < MESSAGE_HEADER_LENGTH)
 
-        header.flip()
+        return null
+    }
 
-        // TODO Read data, if any
+    /**
+     * Read adb message
+     */
+    private fun readAdbMessage() {
+        var dispatchedMessage: AdbMessage?
+        var currentCommand: AdbMessage? = AdbMessage()
+        var currentData: AdbMessage? = null
+        readHeader(currentCommand!!)
 
-        return AdbMessage(header.array())
+        while (true) {
+            val request = connection.requestWait() ?: return
+            val message = request.clientData as AdbMessage
+            request.clientData = null
+            dispatchedMessage = null
+
+            if (message === currentCommand) {
+                if (message.hasPayload()) {
+                    readPayload(message)
+                    currentData = message
+                } else {
+                    dispatchedMessage = message
+                }
+                currentCommand = null
+            } else if (message === currentData) {
+                dispatchedMessage = message
+                currentData = null
+            }
+
+            if (dispatchedMessage != null)
+                break
+
+            if (request.endpoint === outEndpoint) {
+                releaseOutRequest(request)
+            } else {
+                releaseInRequest(request)
+            }
+        }
+
+        // TODO Use dispatched message
+
+    }
+
+    /**
+     * Read message header
+     *
+     * @param message [AdbMessage] to read to
+     * @return `true` if the queue was successful, `false` otherwise
+     */
+    private fun readHeader(message: AdbMessage): Boolean {
+        val request = inRequest
+        request.clientData = message
+        @Suppress("DEPRECATION")
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            request.queue(message.header)
+        else request.queue(message.header, MESSAGE_HEADER_LENGTH)
+        releaseInRequest(request)
+        return result
+    }
+
+    /**
+     * Read message payload
+     *
+     * @param message [AdbMessage] to read to
+     * @return `true` if the queue was successful, `false` otherwise
+     */
+    private fun readPayload(message: AdbMessage): Boolean {
+        val request = inRequest
+        request.clientData = message
+        @Suppress("DEPRECATION")
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            request.queue(message.payload)
+        else request.queue(message.payload, message.dataLength)
+        releaseInRequest(request)
+        return result
+    }
+
+    /**
+     * Release out [UsbRequest] back to pool
+     *
+     * @param request [UsbRequest] to release
+     */
+    private fun releaseOutRequest(request: UsbRequest) {
+        synchronized(outRequestPool) {
+            outRequestPool.add(request)
+        }
+    }
+
+    /**
+     * Release in [UsbRequest] back to pool
+     *
+     * @param request [UsbRequest] to release
+     */
+    private fun releaseInRequest(request: UsbRequest) {
+        synchronized(inRequestPool) {
+            inRequestPool.add(request)
+        }
     }
 
     override fun push(localPath: String, remotePath: String) {
