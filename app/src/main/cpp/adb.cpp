@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#include "adb.h"
+#include "include/adb.h"
 
 void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *, jobject) {
 	std::string message = "Initializing adb...";
