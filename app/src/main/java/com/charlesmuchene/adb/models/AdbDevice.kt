@@ -20,11 +20,8 @@ import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbRequest
 import android.os.Build
-import com.charlesmuchene.adb.interfaces.AdbInterface
-import com.charlesmuchene.adb.utilities.MAX_BUFFER_LENGTH
 import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_LENGTH
 import com.charlesmuchene.adb.utilities.getBulkEndpoints
-import com.charlesmuchene.adb.utilities.logd
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import java.util.*
@@ -33,11 +30,10 @@ import kotlin.concurrent.thread
 /**
  * Adb device
  */
-class AdbDevice(private val usbInterface: UsbInterface, private val connection: UsbDeviceConnection)
-    : AdbInterface {
+class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDeviceConnection) {
 
+    val outEndpoint: UsbEndpoint
     private val inEndpoint: UsbEndpoint
-    private val outEndpoint: UsbEndpoint
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
 
@@ -77,11 +73,7 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      */
     fun connect() {
         val connectMessage = AdbMessage.generateConnectMessage()
-        logd("Connection message: $connectMessage")
-        write(connectMessage)
-
-        val authMessage = read()
-        logd(authMessage.toString())
+        // TODO Establish adb device connection
     }
 
     /**
@@ -94,74 +86,17 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
     }
 
     /**
-     * Write data to device
-     *
-     * @param message Payload to send
-     *
-     * TODO Perform in aux thread
-     */
-    private fun write(message: AdbMessage) {
-        transfer(message.header.array())
-        if (message.hasPayload())
-            sendLargePayload(message.getPayload())
-    }
-
-    /**
-     * Split and send large payload
-     *
-     * @param data Payload to send
-     *
-     * TODO Perform in aux thread
-     */
-    private fun sendLargePayload(data: ByteArray) {
-        val payload = ByteArray(MAX_BUFFER_LENGTH)
-        val size = data.size
-        val chunks = (size / MAX_BUFFER_LENGTH) + if (size % MAX_BUFFER_LENGTH != 0) 1 else 0
-        val stream = data.inputStream()
-
-        for (chunk in 0 until chunks) {
-            val length = stream.read(payload)
-            if (length != -1)
-                transfer(payload, length)
-        }
-    }
-
-    /**
-     * Transfer data to device
-     *
-     * @param data Data buffer
-     * @param length The size of data to send
-     *
-     * TODO Perform in aux thread
-     */
-    private fun transfer(data: ByteArray, length: Int = data.size) {
-        val transferredBytes = connection.bulkTransfer(outEndpoint, data, length, 1000)
-        logd("Transferred ${(transferredBytes / length) * 100}% of payload")
-    }
-
-    /**
-     * Read message payload from device
-     *
-     * @return [AdbMessage] as the read payload
-     *
-     * TODO Perform in aux thread
-     */
-    private fun read(): AdbMessage? {
-
-        return null
-    }
-
-    /**
      * Read adb message
      */
-    private fun readAdbMessage() {
+    private fun readAdbMessage(): AdbMessage? {
+
         var dispatchedMessage: AdbMessage?
         var currentCommand: AdbMessage? = AdbMessage()
         var currentData: AdbMessage? = null
         readHeader(currentCommand!!)
 
         while (true) {
-            val request = connection.requestWait() ?: return
+            val request = connection.requestWait() ?: return null
             val message = request.clientData as AdbMessage
             request.clientData = null
             dispatchedMessage = null
@@ -189,8 +124,7 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
             }
         }
 
-        // TODO Use dispatched message
-
+        return dispatchedMessage
     }
 
     /**
@@ -249,11 +183,4 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
         }
     }
 
-    override fun push(localPath: String, remotePath: String) {
-        // TODO Add push file implementation
-    }
-
-    override fun install(apkPath: String, install: Boolean) {
-        // TODO Add install implementation
-    }
 }
