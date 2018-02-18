@@ -19,9 +19,12 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import com.charlesmuchene.adb.interfaces.AdbInterface
-import com.charlesmuchene.adb.utilities.MAX_BUFFER_PAYLOAD
+import com.charlesmuchene.adb.utilities.MAX_BUFFER_LENGTH
+import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_LENGTH
 import com.charlesmuchene.adb.utilities.getBulkEndpoints
 import com.charlesmuchene.adb.utilities.logd
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Adb device
@@ -46,7 +49,7 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
         logd("Connection message: $connectMessage")
         write(connectMessage)
 
-        val authMessage = read(44)
+        val authMessage = read()
         logd(authMessage.toString())
     }
 
@@ -63,26 +66,26 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * Write data to device
      *
      * @param message Payload to send
+     *
+     * TODO Perform in aux thread
      */
     private fun write(message: AdbMessage) {
-        if (message.isSmallPayload()) {
-            transfer(message.getTotalPayload())
-        } else {
-            transfer(message.headerBuffer.array())
-            if (message.hasDataPayload())
-                sendLargePayload(message.dataBuffer.array())
-        }
+        transfer(message.headerBuffer.array())
+        if (message.hasDataPayload())
+            sendLargePayload(message.getPayload())
     }
 
     /**
      * Split and send large payload
      *
      * @param data Payload to send
+     *
+     * TODO Perform in aux thread
      */
     private fun sendLargePayload(data: ByteArray) {
-        val payload = ByteArray(MAX_BUFFER_PAYLOAD)
+        val payload = ByteArray(MAX_BUFFER_LENGTH)
         val size = data.size
-        val chunks = (size / MAX_BUFFER_PAYLOAD) + if (size % MAX_BUFFER_PAYLOAD != 0) 1 else 0
+        val chunks = (size / MAX_BUFFER_LENGTH) + if (size % MAX_BUFFER_LENGTH != 0) 1 else 0
         val stream = data.inputStream()
 
         for (chunk in 0 until chunks) {
@@ -96,24 +99,38 @@ class AdbDevice(private val usbInterface: UsbInterface, private val connection: 
      * Transfer data to device
      *
      * @param data Data buffer
+     * @param length The size of data to send
+     *
+     * TODO Perform in aux thread
      */
     private fun transfer(data: ByteArray, length: Int = data.size) {
-        val transferredBytes = connection.bulkTransfer(outEndpoint, data, length, 10)
+        val transferredBytes = connection.bulkTransfer(outEndpoint, data, length, 1000)
         logd("Transferred ${(transferredBytes / length) * 100}% of payload")
     }
 
     /**
-     * Read payload from device
+     * Read message payload from device
      *
-     * @param length The length of data to read. Defaults to [MAX_BUFFER_PAYLOAD].
      * @return [AdbMessage] as the read payload
+     *
+     * TODO Perform in aux thread
      */
-    private fun read(length: Int = MAX_BUFFER_PAYLOAD): AdbMessage? {
-        val payload = ByteArray(length)
-        val bytesRead = connection.bulkTransfer(inEndpoint, payload, length, 10)
-        if (bytesRead <= 0) return null
-        val array = if (bytesRead < length) payload.copyOfRange(0, bytesRead) else payload
-        return AdbMessage(array)
+    private fun read(): AdbMessage? {
+        // Read message header
+        val header = ByteBuffer.allocate(MESSAGE_HEADER_LENGTH).order(ByteOrder.LITTLE_ENDIAN)
+        var dataRead = 0
+        do {
+            val bytesRead = connection.bulkTransfer(inEndpoint, header.array(), dataRead,
+                    MESSAGE_HEADER_LENGTH - dataRead, 10)
+            if (bytesRead <= 0) return null
+            dataRead += bytesRead
+        } while (dataRead < MESSAGE_HEADER_LENGTH)
+
+        header.flip()
+
+        // TODO Read data, if any
+
+        return AdbMessage(header.array())
     }
 
     override fun push(localPath: String, remotePath: String) {

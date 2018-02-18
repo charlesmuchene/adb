@@ -46,7 +46,7 @@ object Adb {
     fun addDevice(device: UsbDevice) {
         val usbInterface = device.getAdbInterface() ?: return
         val connection = usbManager.openDevice(device) ?: return
-        val success = connection.claimInterface(usbInterface, true)
+        val success = connection.claimInterface(usbInterface, false)
         if (success) {
             val adbDevice = AdbDevice(usbInterface, connection)
             devices[device.deviceName] = adbDevice

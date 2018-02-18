@@ -15,25 +15,28 @@
 
 package com.charlesmuchene.adb.models
 
-import com.charlesmuchene.adb.utilities.*
+import com.charlesmuchene.adb.utilities.A_CNXN
+import com.charlesmuchene.adb.utilities.A_VERSION
+import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_LENGTH
+import com.charlesmuchene.adb.utilities.MESSAGE_PAYLOAD
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
  * Adb message
  */
-class AdbMessage() {
+class AdbMessage {
 
     /**
      * Message header buffer
      */
-    val headerBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_HEADER_PAYLOAD)
+    val headerBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_HEADER_LENGTH)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     /**
      * Data payload buffer
      */
-    val dataBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_DATA_PAYLOAD)
+    private val dataBuffer: ByteBuffer = ByteBuffer.allocate(MESSAGE_PAYLOAD)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     /**
@@ -64,18 +67,20 @@ class AdbMessage() {
      * Data payload as string
      */
     private val dataPayloadAsString: String?
-        get() = if (dataLength == 0) null
+        get() = if (dataLength <= 0 || dataLength >= MESSAGE_PAYLOAD) null
         else String(dataBuffer.array(), 0, dataLength - 1)
+
+    constructor()
 
     /**
      * Constructor
      *
      * @param payload [ByteArray] to construct the message with
      */
-    constructor(payload: ByteArray) : this() {
-        headerBuffer.put(payload.copyOfRange(0, MESSAGE_HEADER_PAYLOAD))
-        if (hasDataPayload())
-            dataBuffer.put(payload, MESSAGE_HEADER_PAYLOAD, payload.size)
+    constructor(payload: ByteArray) {
+        headerBuffer.put(payload, 0, MESSAGE_HEADER_LENGTH)
+//        if (hasDataPayload())
+//            dataBuffer.put(payload, MESSAGE_HEADER_LENGTH, payload.size)
     }
 
     /**
@@ -86,21 +91,17 @@ class AdbMessage() {
     fun hasDataPayload() = dataLength > 0
 
     /**
-     * Determine if this message is a small payload. A small payload
-     * is efficient to send in adb since the header can be sent together
-     * with the data payload in one go.
+     * Get the message's payload
      *
-     * @return `true` if the total message payload <= [MAX_BUFFER_PAYLOAD], `false`
-     * otherwise
+     * @return [ByteArray] as the payload
      */
-    fun isSmallPayload() = (MESSAGE_HEADER_PAYLOAD + dataLength) <= MAX_BUFFER_PAYLOAD
-
-    /**
-     * Get the total message payload
-     *
-     * @return Total message payload (header + data)
-     */
-    fun getTotalPayload() = headerBuffer.array() + dataBuffer.array().copyOfRange(0, dataLength)
+    fun getPayload(): ByteArray {
+        return when {
+            dataLength <= 0 -> return ByteArray(0)
+            dataLength == MESSAGE_PAYLOAD -> dataBuffer.array()
+            else -> dataBuffer.array().copyOfRange(0, dataLength)
+        }
+    }
 
     /**
      * Set up the message with a byte array payload
@@ -182,11 +183,8 @@ class AdbMessage() {
      * @return The read string
      */
     private fun readString(offset: Int = 0, length: Int = 4): String {
-        var mark = offset
-        val data = ByteArray(length)
-        for (index in 0 until length)
-            data[index] = headerBuffer.get(mark++)
-        return String(data)
+        headerBuffer.clear()
+        return String(headerBuffer.array(), offset, length)
     }
 
     override fun toString(): String {
@@ -205,7 +203,7 @@ class AdbMessage() {
          */
         fun generateConnectMessage(): AdbMessage {
             val message = AdbMessage()
-            message[A_CNXN, A_VERSION, MESSAGE_DATA_PAYLOAD] = "host::charlo"
+            message[A_CNXN, A_VERSION, MESSAGE_PAYLOAD] = "host::charlo"
             return message
         }
 

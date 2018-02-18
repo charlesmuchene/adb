@@ -24,17 +24,17 @@ const val A_VERSION = 0x01000000
 /**
  * Maximum payload constants
  */
-const val MAX_BUFFER_PAYLOAD = 16_384
+const val MAX_BUFFER_LENGTH = 16_384
 
 /**
- * Adb message header payload
+ * Adb message header length
  */
-const val MESSAGE_HEADER_PAYLOAD = 24
+const val MESSAGE_HEADER_LENGTH = 24
 
 /**
  * Adb data payload
  */
-const val MESSAGE_DATA_PAYLOAD = 65_536
+const val MESSAGE_PAYLOAD = 65_536
 
 /**
  * Adb sync request constants
