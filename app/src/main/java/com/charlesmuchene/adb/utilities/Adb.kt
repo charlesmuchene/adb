@@ -27,6 +27,12 @@ import com.charlesmuchene.adb.models.AdbMessage
  */
 object Adb : AdbInterface {
 
+    private var keyPath = ""
+
+    private external fun initializeAdb(path: String)
+    external fun getPublicKey(path: String = keyPath): ByteArray
+    external fun signToken(token: ByteArray, path: String = keyPath): ByteArray
+
     val devices = HashMap<String, AdbDevice>()
 
     private lateinit var usbManager: UsbManager
@@ -38,6 +44,8 @@ object Adb : AdbInterface {
      */
     fun initialize(context: Context) {
         usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        keyPath = context.filesDir.absolutePath
+        initializeAdb(keyPath)
     }
 
     /**

@@ -15,10 +15,7 @@
 
 package com.charlesmuchene.adb.models
 
-import com.charlesmuchene.adb.utilities.A_CNXN
-import com.charlesmuchene.adb.utilities.A_VERSION
-import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_LENGTH
-import com.charlesmuchene.adb.utilities.MESSAGE_PAYLOAD
+import com.charlesmuchene.adb.utilities.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -201,10 +198,25 @@ class AdbMessage {
 
         /**
          * Generate a connect message
+         *
+         * @return [AdbMessage] instance
          */
         fun generateConnectMessage(): AdbMessage {
             val message = AdbMessage()
             message[A_CNXN, A_VERSION, MESSAGE_PAYLOAD] = "host::charlo"
+            return message
+        }
+
+        /**
+         * Generate an auth message
+         *
+         * @param type A public key or signature
+         * @param payload Payload
+         * @return [AdbMessage] instance
+         */
+        fun generateAuthMessage(type: Int, payload: ByteArray): AdbMessage {
+            val message = AdbMessage()
+            message[A_AUTH, type, 0] = payload
             return message
         }
 

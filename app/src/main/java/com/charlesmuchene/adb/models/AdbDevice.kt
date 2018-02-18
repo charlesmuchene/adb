@@ -29,6 +29,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
 
     val outEndpoint: UsbEndpoint
     private var connected = false
+    private var signatureSent = false
     private val inEndpoint: UsbEndpoint
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
@@ -82,8 +83,20 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
 
         when (message.command) {
             A_AUTH -> {
-                // TODO Send authentication
-                logd("Send authentication")
+
+                val (type, payload) = if (signatureSent) {
+                    val publicKey = Adb.getPublicKey()
+                    Pair(RSAPUBLICKEY, publicKey)
+                } else {
+                    signatureSent = true
+                    val token = message.getPayload()
+                    val signature = Adb.signToken(token)
+                    Pair(SIGNATURE, signature)
+                }
+
+                val nextMessage = AdbMessage.generateAuthMessage(type, payload)
+                queueAdbMessage(nextMessage)
+
             }
 
             A_CNXN -> {
@@ -134,6 +147,8 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         // TODO Stop all ongoing actions
         connection.releaseInterface(usbInterface)
         connection.close()
+        connected = false
+        signatureSent = false
     }
 
     /**

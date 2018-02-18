@@ -15,6 +15,7 @@
 
 #include <jni.h>
 #include <string>
+#include <auth.h>
 #include <android/log.h>
 
 #define LOG_TAG "adb"
@@ -27,5 +28,29 @@
 #define W(...) LOG(ANDROID_LOG_WARN, __VA_ARGS__)
 
 extern "C" {
-void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *, jobject);
+/**
+ * Initialize adb. This invocation generates the RSA key pair if they don't already exist.
+ *
+ * @param path Path to the key
+ */
+void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *, jobject, jstring path);
+
+/**
+ * Sign the provided token
+ *
+ * @param token Token to sign
+ * @param path Path to the key
+ * @return Signature buffer
+ */
+jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *, jobject, jbyteArray token,
+                                                     jstring path);
+
+/**
+ * Retrieve the public key
+ *
+ * @param path Path to the key
+ * @return Public key buffer
+ */
+jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_getPublicKey(JNIEnv *, jobject, jstring path);
+
 }
