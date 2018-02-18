@@ -15,10 +15,8 @@
 
 package com.charlesmuchene.adb.utilities
 
-import android.hardware.usb.UsbConstants
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbEndpoint
-import android.hardware.usb.UsbInterface
+import android.hardware.usb.*
+import java.nio.ByteBuffer
 
 /**
  * Find an adb interface from the device descriptors
@@ -52,4 +50,18 @@ fun UsbInterface.getBulkEndpoints(): Pair<UsbEndpoint?, UsbEndpoint?> {
                 else outEp = it
             }
     return Pair(inEp, outEp)
+}
+
+/**
+ * Perform a queue based on the SDK level
+ *
+ * @param buffer [ByteBuffer] buffer to queue on
+ * @param length Optional buffer length
+ */
+fun UsbRequest.platformQueue(buffer: ByteBuffer, length: Int): Boolean {
+    @Suppress("DEPRECATION")
+    // FIXME Incompatibility with the new queue api?
+    /*return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) queue(buffer)
+    else queue(buffer, length)*/
+    return queue(buffer, length)
 }

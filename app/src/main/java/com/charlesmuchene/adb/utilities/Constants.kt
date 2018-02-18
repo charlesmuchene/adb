@@ -34,7 +34,7 @@ const val MESSAGE_HEADER_LENGTH = 24
 /**
  * Adb data payload
  */
-const val MESSAGE_PAYLOAD = 65_536
+const val MESSAGE_PAYLOAD = MAX_BUFFER_LENGTH // 65_536 for SDK_INT <= 26
 
 /**
  * Adb sync request constants

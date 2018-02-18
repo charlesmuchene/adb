@@ -64,12 +64,6 @@ class AdbMessage {
         get() = header.getInt(12)
 
     /**
-     * Inverse of the command integer
-     */
-    private val magic: Int
-        get() = header.getInt(20)
-
-    /**
      * Data payload as string
      */
     private val dataPayloadAsString: String?
@@ -128,6 +122,7 @@ class AdbMessage {
         }
 
         if (data != null) payload.put(data, 0, data.size)
+
     }
 
     /**
@@ -179,13 +174,6 @@ class AdbMessage {
             result += element
         }
         return result
-    }
-
-    fun isValid(): Boolean {
-        // TODO Simplify and document
-        if (command != magic xor -0x1)
-            return false
-        return true
     }
 
     /**
