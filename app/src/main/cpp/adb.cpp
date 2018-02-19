@@ -42,10 +42,11 @@ jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *env, jobj
 
 jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_getPublicKey(JNIEnv *env, jobject,
                                                                   jstring path) {
-	auto constructedPath = std::string(env->GetStringUTFChars(path, 0)) + "/adbkey.pub";
+	const char *pathUTFChars = env->GetStringUTFChars(path, 0);
+	auto constructedPath = std::string(pathUTFChars) + "/adbkey.pub";
 	const char *keyPath = constructedPath.c_str();
 	std::vector<char> publicKey = getPublicKey(keyPath);
-	env->ReleaseStringUTFChars(path, keyPath);
+	env->ReleaseStringUTFChars(path, pathUTFChars);
 	int len = publicKey.size();
 	jbyteArray array = env->NewByteArray(len);
 	env->SetByteArrayRegion(array, 0, len, (const jbyte *) &publicKey[0]);

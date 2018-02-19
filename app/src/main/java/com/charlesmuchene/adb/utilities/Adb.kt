@@ -27,7 +27,7 @@ import com.charlesmuchene.adb.models.AdbMessage
  */
 object Adb : AdbInterface {
 
-    private var keyPath = ""
+    private lateinit var keyPath: String
 
     private external fun initializeAdb(path: String)
     external fun getPublicKey(path: String = keyPath): ByteArray
