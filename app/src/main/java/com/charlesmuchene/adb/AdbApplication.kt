@@ -16,18 +16,22 @@
 package com.charlesmuchene.adb
 
 import android.app.Application
+import android.content.Context
+import android.hardware.usb.UsbManager
 import com.charlesmuchene.adb.utilities.Adb
 import timber.log.Timber
 
 /**
  * Adb application
  */
-class AdbApplication: Application() {
+class AdbApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
 
-        Adb.initialize(this)
+        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        val keyPath = filesDir.absolutePath
+        Adb.initialize(usbManager, keyPath)
 
         Timber.plant(Timber.DebugTree())
     }

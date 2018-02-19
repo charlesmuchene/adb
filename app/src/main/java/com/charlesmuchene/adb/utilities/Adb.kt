@@ -15,7 +15,6 @@
 
 package com.charlesmuchene.adb.utilities
 
-import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import com.charlesmuchene.adb.interfaces.AdbInterface
@@ -40,11 +39,12 @@ object Adb : AdbInterface {
     /**
      * Initialize adb utilities
      *
-     * @param context [Context] instance
+     * @param usbManager [UsbManager] instance
+     * @param keyPath Path to the key
      */
-    fun initialize(context: Context) {
-        usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-        keyPath = context.filesDir.absolutePath
+    fun initialize(usbManager: UsbManager, keyPath: String) {
+        this.usbManager = usbManager
+        this.keyPath = keyPath
         initializeAdb(keyPath)
     }
 
