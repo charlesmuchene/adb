@@ -14,8 +14,9 @@
  */
 
 #include "include/adb.h"
+#include <auth.h>
 
-void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *env, jobject, jstring path) {
+void Java_com_charlesmuchene_adb_utilities_Adb_initializeAdb(JNIEnv *env, jobject, jstring path) {
 
 	D("Initializing adb...");
 	const char *keyPath = (std::string(env->GetStringUTFChars(path, 0)) + "/adbkey").c_str();
@@ -29,7 +30,7 @@ jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *env, jobj
                                                                jstring path) {
 	const char *keyPath = (std::string(env->GetStringUTFChars(path, 0)) + "/adbkey").c_str();
 	int length = env->GetArrayLength(token);
-	char tokenBuffer[length] = {0}; // TODO All allocation?
+	char tokenBuffer[length];
 	env->GetByteArrayRegion(token, 0, length, reinterpret_cast<jbyte *>(tokenBuffer));
 	std::vector<char> signature = signToken(tokenBuffer, (size_t) length, keyPath);
 	env->ReleaseStringUTFChars(path, keyPath);

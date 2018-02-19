@@ -18,6 +18,7 @@
  *
  */
 
+#include <adb.h>
 #include <auth.h>
 #include <string>
 #include <openssl/nid.h>
@@ -208,7 +209,8 @@ std::vector<char> signToken(const char * token, size_t length, std::string keyPa
 	std::vector<char> signature(MAX_PAYLOAD);
 	std::shared_ptr<RSA> keyPointer;
 	readKeyFromFile(keyPath, keyPointer);
-	adbAuthSign(keyPointer.get(), token, length, &signature[0]);
+	int len = adbAuthSign(keyPointer.get(), token, length, &signature[0]);
+	signature.resize((unsigned int) len);
 	return signature;
 }
 

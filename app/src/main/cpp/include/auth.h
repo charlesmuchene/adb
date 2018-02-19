@@ -13,11 +13,14 @@
  * limitations under the License.
  */
 
-#include <adb.h>
+#pragma once
+
 #include <vector>
+#include <cstdio>
+#include <string>
 
 #define TOKEN_SIZE 20
-constexpr size_t MAX_PAYLOAD = 1024 * 1024;
+constexpr size_t MAX_PAYLOAD = 16 * 1024; // 16_384
 
 /**
  * Generate adb key pair

@@ -13,15 +13,16 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include <jni.h>
 #include <string>
-#include <auth.h>
 #include <android/log.h>
 
 #define LOG_TAG "adb"
 
 #define LOG(severity, ...) \
-	__android_log_print(severity, LOG_TAG, __VA_ARGS__)
+    __android_log_print(severity, LOG_TAG, __VA_ARGS__)
 
 #define E(...) LOG(ANDROID_LOG_ERROR, __VA_ARGS__)
 #define D(...) LOG(ANDROID_LOG_DEBUG, __VA_ARGS__)
@@ -33,7 +34,7 @@ extern "C" {
  *
  * @param path Path to the key
  */
-void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *, jobject, jstring path);
+void Java_com_charlesmuchene_adb_utilities_Adb_initializeAdb(JNIEnv *, jobject, jstring path);
 
 /**
  * Sign the provided token
@@ -43,7 +44,7 @@ void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *, jobject,
  * @return Signature buffer
  */
 jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *, jobject, jbyteArray token,
-                                                     jstring path);
+                                                               jstring path);
 
 /**
  * Retrieve the public key
