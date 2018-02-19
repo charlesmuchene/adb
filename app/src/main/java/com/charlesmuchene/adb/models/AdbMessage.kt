@@ -64,7 +64,7 @@ class AdbMessage {
      * Data payload as string
      */
     private val dataPayloadAsString: String?
-        get() = if (dataLength <= 0 || dataLength >= MESSAGE_PAYLOAD) null
+        get() = if (dataLength <= 0 || dataLength > MESSAGE_PAYLOAD) null
         else String(payload.array(), 0, dataLength - 1)
 
     constructor()
@@ -98,6 +98,16 @@ class AdbMessage {
             dataLength == MESSAGE_PAYLOAD -> payload.array()
             else -> payload.array().copyOfRange(0, dataLength)
         }
+    }
+
+    /**
+     * Check if devices is online as reported back in this message
+     *
+     * @return `true` if device is online, `false` otherwise
+     */
+    fun isDeviceOnline(): Boolean {
+        return if (dataPayloadAsString == null) false
+        else dataPayloadAsString?.startsWith("device") ?: false
     }
 
     /**
@@ -173,20 +183,8 @@ class AdbMessage {
         return result
     }
 
-    /**
-     * Extract a string from the header buffer
-     *
-     * @param offset Starting index on the buffer
-     * @param length Length of the read
-     * @return The read string
-     */
-    private fun readString(offset: Int = 0, length: Int = 4): String {
-        header.clear()
-        return String(header.array(), offset, length)
-    }
-
     override fun toString(): String {
-        val commandName = readString()
+        val commandName = String(header.array(), 0, 4)
         var string = "Message: $commandName Arg0: $argumentZero Arg1: $argumentOne " +
                 "DataLength: $dataLength"
         if (hasPayload()) string += " Data: $dataPayloadAsString"

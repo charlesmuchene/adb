@@ -226,6 +226,7 @@ std::vector<char> getPublicKey(std::string keyPath) {
 	input >> content;
 	input.close();
 	content += '\0';
+	D("Public key length: %d", content.size());
 	std::vector<char> publicKey(content.begin(), content.end());
 	return publicKey;
 }

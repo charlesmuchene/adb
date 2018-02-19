@@ -19,13 +19,22 @@ package com.charlesmuchene.adb.utilities
 import timber.log.Timber
 
 /**
- * Debug log
+ * Log a debug message
  *
  * @param message Message to log
  */
 fun logd(message: String) = Timber.d(message)
 
 /**
- * Error log
+ * Log an error message
+ *
+ * @param message Message to log
  */
 fun loge(message: String) = Timber.e(message)
+
+/**
+ * Log a warning with the given message
+ *
+ * @param message Message to log
+ */
+fun logw(message: String) = Timber.w(message)

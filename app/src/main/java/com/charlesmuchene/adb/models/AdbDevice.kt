@@ -82,6 +82,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     private fun dispatchMessage(message: AdbMessage) {
 
         when (message.command) {
+
             A_AUTH -> {
 
                 val (type, payload) = if (signatureSent) {
@@ -100,18 +101,25 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             }
 
             A_CNXN -> {
-                // TODO We are happy people
-                logd("Start sending")
-                connected = true
+
+                if (message.isDeviceOnline()) {
+                    logd("Device is online")
+                    connected = true
+                }
+
+                adbThread.interrupt()
             }
 
             A_CLSE -> {
+                logd("Close the connection")
                 connected = false
                 close()
             }
-        }
 
-        adbThread.interrupt()
+            else -> {
+                logw("Received an unknown command in message: $message")
+            }
+        }
     }
 
     /**
@@ -144,11 +152,11 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Close the adb device
      */
     fun close() {
-        // TODO Stop all ongoing actions
         connection.releaseInterface(usbInterface)
         connection.close()
         connected = false
         signatureSent = false
+        adbThread.interrupt()
     }
 
     /**
