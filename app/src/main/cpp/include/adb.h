@@ -34,7 +34,7 @@ extern "C" {
  *
  * @param path Path to the key
  */
-void Java_com_charlesmuchene_adb_utilities_Adb_initializeAdb(JNIEnv *, jobject, jstring path);
+void Java_com_charlesmuchene_adb_Adb_initializeAdb(JNIEnv *, jobject, jstring path);
 
 /**
  * Sign the provided token
@@ -43,7 +43,7 @@ void Java_com_charlesmuchene_adb_utilities_Adb_initializeAdb(JNIEnv *, jobject, 
  * @param path Path to the key
  * @return Signature buffer
  */
-jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *, jobject, jbyteArray token,
+jbyteArray Java_com_charlesmuchene_adb_Adb_signToken(JNIEnv *, jobject, jbyteArray token,
                                                                jstring path);
 
 /**
@@ -52,6 +52,6 @@ jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *, jobject
  * @param path Path to the key
  * @return Public key buffer
  */
-jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_getPublicKey(JNIEnv *, jobject, jstring path);
+jbyteArray Java_com_charlesmuchene_adb_Adb_getPublicKey(JNIEnv *, jobject, jstring path);
 
 }

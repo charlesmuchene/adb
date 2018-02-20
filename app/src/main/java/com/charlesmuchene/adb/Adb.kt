@@ -13,13 +13,16 @@
  * limitations under the License.
  */
 
-package com.charlesmuchene.adb.utilities
+package com.charlesmuchene.adb
 
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import com.charlesmuchene.adb.interfaces.AdbInterface
 import com.charlesmuchene.adb.models.AdbDevice
 import com.charlesmuchene.adb.models.AdbMessage
+import com.charlesmuchene.adb.utilities.MAX_BUFFER_LENGTH
+import com.charlesmuchene.adb.utilities.getAdbInterface
+import com.charlesmuchene.adb.utilities.logd
 
 /**
  * Adb utilities
@@ -43,8 +46,8 @@ object Adb : AdbInterface {
      * @param keyPath Path to the key
      */
     fun initialize(usbManager: UsbManager, keyPath: String) {
-        this.usbManager = usbManager
-        this.keyPath = keyPath
+        Adb.usbManager = usbManager
+        Adb.keyPath = keyPath
         initializeAdb(keyPath)
     }
 

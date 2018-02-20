@@ -18,7 +18,6 @@ package com.charlesmuchene.adb
 import android.app.Application
 import android.content.Context
 import android.hardware.usb.UsbManager
-import com.charlesmuchene.adb.utilities.Adb
 import timber.log.Timber
 
 /**

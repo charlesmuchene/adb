@@ -21,7 +21,7 @@ import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import com.charlesmuchene.adb.R
 import com.charlesmuchene.adb.receivers.UsbConnectionReceiver
-import com.charlesmuchene.adb.utilities.Adb
+import com.charlesmuchene.adb.Adb
 
 /**
  * Home screen

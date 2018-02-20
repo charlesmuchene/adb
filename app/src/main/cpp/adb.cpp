@@ -16,7 +16,7 @@
 #include "include/adb.h"
 #include <auth.h>
 
-void Java_com_charlesmuchene_adb_utilities_Adb_initializeAdb(JNIEnv *env, jobject, jstring path) {
+void Java_com_charlesmuchene_adb_Adb_initializeAdb(JNIEnv *env, jobject, jstring path) {
 
 	D("Initializing adb...");
 	const char *keyPath = (std::string(env->GetStringUTFChars(path, 0)) + "/adbkey").c_str();
@@ -25,7 +25,7 @@ void Java_com_charlesmuchene_adb_utilities_Adb_initializeAdb(JNIEnv *env, jobjec
 
 }
 
-jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *env, jobject,
+jbyteArray Java_com_charlesmuchene_adb_Adb_signToken(JNIEnv *env, jobject,
                                                                jbyteArray token,
                                                                jstring path) {
 	const char *keyPath = (std::string(env->GetStringUTFChars(path, 0)) + "/adbkey").c_str();
@@ -40,7 +40,7 @@ jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_signToken(JNIEnv *env, jobj
 	return array;
 }
 
-jbyteArray Java_com_charlesmuchene_adb_utilities_Adb_getPublicKey(JNIEnv *env, jobject,
+jbyteArray Java_com_charlesmuchene_adb_Adb_getPublicKey(JNIEnv *env, jobject,
                                                                   jstring path) {
 	const char *pathUTFChars = env->GetStringUTFChars(path, 0);
 	auto constructedPath = std::string(pathUTFChars) + "/adbkey.pub";
