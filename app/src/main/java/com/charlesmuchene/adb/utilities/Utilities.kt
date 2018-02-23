@@ -17,6 +17,8 @@
 package com.charlesmuchene.adb.utilities
 
 import timber.log.Timber
+import java.io.File
+import java.io.FileInputStream
 
 /**
  * Log a debug message
@@ -38,3 +40,14 @@ fun loge(message: String) = Timber.e(message)
  * @param message Message to log
  */
 fun logw(message: String) = Timber.w(message)
+
+/**
+ * Open a input stream to a local file
+ *
+ * @param path Absolute path to a file
+ * @return [Triple] for last modified time, length and stream to the given file
+ */
+fun openStream(path: String): Triple<Int, Long, FileInputStream> {
+    val file = File(path)
+    return Triple((file.lastModified() / 1000).toInt(), file.length(), FileInputStream(file))
+}

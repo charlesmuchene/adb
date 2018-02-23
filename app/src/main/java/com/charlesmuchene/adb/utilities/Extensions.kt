@@ -65,3 +65,13 @@ fun UsbRequest.platformQueue(buffer: ByteBuffer, length: Int): Boolean {
     else queue(buffer, length)*/
     return queue(buffer, length)
 }
+
+/**
+ * Put string into the buffer
+ *
+ * @param string String to put into the buffer
+ * @return [ByteBuffer]
+ */
+fun ByteBuffer.put(string: String): ByteBuffer {
+    return put(string.toByteArray())
+}

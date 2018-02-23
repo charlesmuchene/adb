@@ -17,12 +17,11 @@ package com.charlesmuchene.adb
 
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.Environment
 import com.charlesmuchene.adb.interfaces.AdbInterface
 import com.charlesmuchene.adb.models.AdbDevice
-import com.charlesmuchene.adb.models.AdbMessage
-import com.charlesmuchene.adb.utilities.MAX_BUFFER_LENGTH
 import com.charlesmuchene.adb.utilities.getAdbInterface
-import com.charlesmuchene.adb.utilities.logd
+import java.io.File
 
 /**
  * Adb utilities
@@ -30,6 +29,8 @@ import com.charlesmuchene.adb.utilities.logd
 object Adb : AdbInterface {
 
     private lateinit var keyPath: String
+    lateinit var externalStorageLocation: File
+        private set
 
     private external fun initializeAdb(path: String)
     external fun getPublicKey(path: String = keyPath): ByteArray
@@ -49,6 +50,17 @@ object Adb : AdbInterface {
         Adb.usbManager = usbManager
         Adb.keyPath = keyPath
         initializeAdb(keyPath)
+        externalStorageLocation = setupPaths()
+    }
+
+    /**
+     * Set up external storage path
+     */
+    private fun setupPaths(): File {
+        // TODO Request for runtime permissions on mobile devices
+        val file = File(Environment.getExternalStorageDirectory().path, "Adb")
+        file.mkdirs()
+        return file
     }
 
     /**
@@ -93,70 +105,9 @@ object Adb : AdbInterface {
         devices.values.forEach { it.close() }
     }
 
-    /**
-     * Write data to device
-     *
-     * @param device [AdbDevice] to write data to
-     * @param message Payload to send
-     *
-     * TODO Perform in aux thread
-     */
-    private fun write(device: AdbDevice, message: AdbMessage) {
-        transfer(device, message.header.array())
-        if (message.hasPayload())
-            sendLargePayload(device, message.getPayload())
-    }
-
-    /**
-     * Read message payload from device
-     *
-     * @return [AdbMessage] as the read payload
-     *
-     * TODO Perform in aux thread
-     */
-    private fun read(): AdbMessage? {
-        // TODO Add implementation
-        return null
-    }
-
-    /**
-     * Split and send payload
-     *
-     * @param device [AdbDevice] to send payload to
-     * @param data Payload to send
-     *
-     * TODO Perform in aux thread
-     */
-    private fun sendLargePayload(device: AdbDevice, data: ByteArray) {
-        val payload = ByteArray(MAX_BUFFER_LENGTH)
-        val size = data.size
-        val chunks = (size / MAX_BUFFER_LENGTH) + if (size % MAX_BUFFER_LENGTH != 0) 1 else 0
-        val stream = data.inputStream()
-
-        for (chunk in 0 until chunks) {
-            val length = stream.read(payload)
-            if (length != -1)
-                transfer(device, payload, length)
-        }
-    }
-
-    /**
-     * Transfer data to device
-     *
-     * @param device [AdbDevice] to transfer data to
-     * @param data Data buffer
-     * @param length The size of data to send
-     *
-     * TODO Perform in aux thread
-     */
-    private fun transfer(device: AdbDevice, data: ByteArray, length: Int = data.size) {
-        val transferredBytes = device.connection.bulkTransfer(device.outEndpoint,
-                data, length, 10)
-        logd("Transferred ${(transferredBytes / length) * 100}% of payload")
-    }
-
+    // TODO Call from aux thread
     override fun push(localPath: String, remotePath: String) {
-        // TODO Add push file implementation
+
     }
 
     override fun install(apkPath: String, install: Boolean) {

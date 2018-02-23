@@ -28,10 +28,12 @@ import java.util.*
  */
 class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDeviceConnection) {
 
+    var nextSocketId = 1
+        private set
+    val inEndpoint: UsbEndpoint
     val outEndpoint: UsbEndpoint
     private var connected = false
     private var signatureSent = false
-    private val inEndpoint: UsbEndpoint
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
 

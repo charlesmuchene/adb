@@ -43,6 +43,16 @@ const val SIGNATURE = 2
 const val RSAPUBLICKEY = 3
 
 /**
+ * Maximum path length
+ */
+const val MAX_PATH_LENGTH = 1024
+
+/**
+ * Sync request size
+ */
+const val SYNC_REQUEST_SIZE = 8
+
+/**
  * Adb sync request constants
  */
 const val A_SYNC = 0x434e5953

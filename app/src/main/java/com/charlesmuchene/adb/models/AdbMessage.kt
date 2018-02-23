@@ -72,12 +72,19 @@ class AdbMessage {
     /**
      * Constructor
      *
-     * @param payload [ByteArray] to construct the message with
+     * @param header [ByteBuffer] to construct the message with
      */
-    constructor(payload: ByteArray) {
-        header.put(payload, 0, MESSAGE_HEADER_LENGTH)
-//        if (hasPayload())
-//            payload.put(payload, MESSAGE_HEADER_LENGTH, payload.size)
+    constructor(header: ByteBuffer) {
+        this.header.put(header)
+    }
+
+    /**
+     * Add a payload to this message.
+     *
+     * @param payload [ByteBuffer] to add
+     */
+    fun addPayload(payload: ByteBuffer) {
+        header.put(payload)
     }
 
     /**
@@ -215,6 +222,31 @@ class AdbMessage {
         fun generateAuthMessage(type: Int, payload: ByteArray): AdbMessage {
             val message = AdbMessage()
             message[A_AUTH, type, 0] = payload
+            return message
+        }
+
+        /**
+         * Generate open message
+         *
+         * @param localId Local socket id
+         * @param command Command to open socket for
+         */
+        fun generateOpenMessage(localId: Int, command: String): AdbMessage {
+            val message = AdbMessage()
+            message[A_OPEN, localId, 0] = command
+            return message
+        }
+
+        /**
+         * Generate write message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote socket id
+         * @param data Payload
+         */
+        fun generateWriteMessage(localId: Int, remoteId: Int, data: ByteArray): AdbMessage {
+            val message = AdbMessage()
+            message[A_WRTE, localId, remoteId] = data
             return message
         }
 
