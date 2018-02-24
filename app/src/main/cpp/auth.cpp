@@ -150,7 +150,7 @@ static int adbAuthSign(RSA *key, const char *token, size_t tokenSize, char *sign
 		return 0;
 	}
 
-	D("The length of the signature is %d", length);
+	D("Successfully signed token: Signature length is %d", length);
 
 	return (int) length;
 }
