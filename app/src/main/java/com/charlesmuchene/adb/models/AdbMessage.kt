@@ -230,6 +230,7 @@ class AdbMessage {
          *
          * @param localId Local socket id
          * @param command Command to open socket for
+         * @return [AdbMessage] instance
          */
         fun generateOpenMessage(localId: Int, command: String): AdbMessage {
             val message = AdbMessage()
@@ -243,10 +244,37 @@ class AdbMessage {
          * @param localId Local socket id
          * @param remoteId Remote socket id
          * @param data Payload
+         * @return [AdbMessage] instance
          */
         fun generateWriteMessage(localId: Int, remoteId: Int, data: ByteArray): AdbMessage {
             val message = AdbMessage()
             message[A_WRTE, localId, remoteId] = data
+            return message
+        }
+
+        /**
+         * Generate okay message
+         *
+         * @param localId Local socket it
+         * @param remoteId Remote socket id
+         * @return [AdbMessage] instance
+         */
+        fun generateOkayMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_OKAY, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate close message
+         *
+         * @param localId Local socket it
+         * @param remoteId Remote socket id
+         * @return [AdbMessage] instance
+         */
+        fun generateCloseMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_CLSE, localId] = remoteId
             return message
         }
 

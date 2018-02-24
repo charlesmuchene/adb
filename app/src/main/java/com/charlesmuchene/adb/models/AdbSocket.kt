@@ -22,22 +22,17 @@ import java.nio.ByteOrder
 /**
  * Adb Socket
  */
-class AdbSocket(private val command: String = "sync:", private val localId: Int,
-                private val device: AdbDevice) {
+class AdbSocket(val localId: Int, private val device: AdbDevice) {
 
     private val mode = 33188 // 0644
     private var remoteId: Int = -1
-
-    init {
-        openSocketForStream(command)
-    }
 
     /**
      * Open socket for stream
      *
      * @param command Command to open stream for
      */
-    private fun openSocketForStream(command: String) {
+    fun openSocket(command: String) {
         val message = AdbMessage.generateOpenMessage(localId, command)
         write(message)
     }
@@ -169,7 +164,7 @@ class AdbSocket(private val command: String = "sync:", private val localId: Int,
      *
      * TODO Perform in aux thread
      */
-    private fun read(length: Int = MESSAGE_HEADER_LENGTH): AdbMessage? {
+    fun read(length: Int = MESSAGE_HEADER_LENGTH): AdbMessage? {
         val buffer = ByteBuffer.allocate(length).order(ByteOrder.LITTLE_ENDIAN)
         var dataRead = 0
         do {
@@ -201,5 +196,35 @@ class AdbSocket(private val command: String = "sync:", private val localId: Int,
         message.addPayload(payload)
 
         return message
+    }
+
+    /**
+     * Send okay message
+     * TODO Read okay message
+     */
+    fun sendOkay() {
+        val message = AdbMessage.generateOkayMessage(localId, remoteId)
+        write(message)
+    }
+
+    /**
+     * Send close message
+     */
+    fun sendClose() {
+        val message = AdbMessage.generateCloseMessage(localId, remoteId)
+        write(message)
+    }
+
+    /**
+     * Handle the given message based on the protocol
+     *
+     * @param message [AdbMessage] instance to process
+     */
+    fun dispatchMessage(message: AdbMessage) {
+        when (message.command) {
+            A_OKAY -> logd(message.toString())
+            A_WRTE -> logd(message.toString())
+            else -> logw("Could not handle $message command")
+        }
     }
 }

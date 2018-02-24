@@ -19,6 +19,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbRequest
+import android.util.SparseArray
 import com.charlesmuchene.adb.Adb
 import com.charlesmuchene.adb.utilities.*
 import java.util.*
@@ -30,9 +31,10 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
 
     var nextSocketId = 1
         private set
+    var isConnected = false
+        private set
     val inEndpoint: UsbEndpoint
     val outEndpoint: UsbEndpoint
-    private var connected = false
     private var signatureSent = false
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
@@ -55,6 +57,11 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Adb thread
      */
     private val adbThread = AdbThread()
+
+    /**
+     * An array of open sockets on this device
+     */
+    private val sockets = SparseArray<AdbSocket>()
 
     init {
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
@@ -107,15 +114,17 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
 
                 if (message.isDeviceOnline()) {
                     logd("Device is online")
-                    connected = true
+                    isConnected = true
                 }
 
                 adbThread.interrupt()
+
+                push()
             }
 
             A_CLSE -> {
                 logd("Close the connection")
-                connected = false
+                isConnected = false
                 close()
             }
 
@@ -155,11 +164,12 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Close the adb device
      */
     fun close() {
-        connection.releaseInterface(usbInterface)
-        connection.close()
-        connected = false
+        assert(sockets.size() == 0) // TODO Find out why and perform close
+        isConnected = false
         signatureSent = false
         adbThread.interrupt()
+        connection.releaseInterface(usbInterface)
+        connection.close()
     }
 
     /**
@@ -208,6 +218,28 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         synchronized(inRequestPool) {
             inRequestPool.add(request)
         }
+    }
+
+    /**
+     * Close the given socket
+     *
+     * @param socket [AdbSocket] to close
+     */
+    private fun closeSocket(socket: AdbSocket) {
+        sockets.remove(socket.localId)
+        nextSocketId--
+    }
+
+    fun push() {
+        val socket = AdbSocket(nextSocketId++, this)
+        sockets.put(socket.localId, socket)
+        socket.openSocket("sync:")
+        val message = socket.read()
+
+        loge("We got $message")
+
+        socket.sendClose()
+        closeSocket(socket)
     }
 
     /**
