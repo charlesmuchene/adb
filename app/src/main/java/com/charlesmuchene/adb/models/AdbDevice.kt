@@ -25,7 +25,9 @@ import com.charlesmuchene.adb.utilities.*
 import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.withTimeout
+import java.io.File
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.*
 
 /**
@@ -254,28 +256,17 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                 }
             }
 
-            /*val file = File(Adb.externalStorageLocation, "me.txt")
-            sendFile(file.absolutePath)*/
-
-        }
-    }
-
-    /**
-     * Send a file
-     *
-     * @param localPath Local absolute file path
-     * @param remotePath Remote absolute file path
-     */
-    fun sendFile(localPath: String, remotePath: String = "sdcard") {
-        if (!isConnected) {
-            loge("Unauthorized device: Perform connection first.")
-            return
-        }
-        logd("Setting up send file socket...")
-        val localId = nextSocketId++
-        val socket = AdbSocket(localId, this@AdbDevice)
-        sockets.put(localId, socket)
-        val job = launch {
+            val lpath = File(Adb.externalStorageLocation, "me.txt").absolutePath
+            val rpath = "sdcard"
+            if (!isConnected) {
+                loge("Unauthorized device: Perform connection first.")
+                return@launch
+            }
+            logd("Setting up send file socket...")
+            val localId = nextSocketId++
+            val socket = AdbSocket(localId, this@AdbDevice)
+            sockets.put(localId, socket)
+//        val job = launch {
             val openMessage = AdbMessage.generateOpenMessage(localId, "sync:")
             queueAdbMessage(openMessage)
             val responseMessage = adbMessageProducer.receive() ?: return@launch
@@ -283,12 +274,14 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             loge("Setup message $responseMessage")
             socket.remoteId = responseMessage.argumentZero
 
-            var b = ByteBuffer.allocate(4 + 4 + remotePath.length)
-            b.put("STAT")
-            b.putInt(Integer.reverseBytes(remotePath.length))
-            b.put(remotePath)
-
+            var b = ByteBuffer.allocate(4 + 4 + rpath.length).order(ByteOrder.LITTLE_ENDIAN)
+//            b.put("STAT")
+//            b.putInt(Integer.reverseBytes(rpath.length))
+//            b.put(rpath)
+            b.putInt(A_STAT).putInt(rpath.length).put(rpath)
+            loge("Buffer Capacity: ${b.capacity()} path length = ${rpath.length}")
             val m = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, b.array())
+            loge("Queueing $m")
             val q = queueAdbMessage(m)
             if (q) loge("success queueing") else loge("What do we do now")
 //            val queued = socket.sendWriteMessage(A_STAT, remotePath.toByteArray())
@@ -301,11 +294,71 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                 loge("We got null")
                 return@launch
             }
-//            assert(message.command == A_OKAY)
+            assert(message.command == A_OKAY)
             logd("Received okay: $message")
+            b = ByteBuffer.allocate(4 + 4 + rpath.length + 1).order(ByteOrder.LITTLE_ENDIAN)
+//            b.put("STAT")
+//            b.putInt(Integer.reverseBytes(rpath.length))
+//            b.put(rpath)
+            b.putInt(A_STAT).putInt(rpath.length + 1).put("$rpath/")
+            val n = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, b.array())
+            val r = queueAdbMessage(n)
+            if (r) loge("success queueing second path") else loge("What do we do now yawe")
+            message = adbMessageProducer.receive() ?: return@launch
+            loge("For with path we got $message")
+            loge("And we have a ${message.getFileStat()}")
             queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
             closeSocket(socket)
             loge("Socket disposed")
+        }
+    }
+
+    /**
+     * Send a file
+     *
+     * @param localPath Local absolute file path
+     * @param remotePath Remote absolute file path
+     */
+    fun sendFile(localPath: String, remotePath: String = "sdcard") {
+//        if (!isConnected) {
+//            loge("Unauthorized device: Perform connection first.")
+//            return
+//        }
+//        logd("Setting up send file socket...")
+//        val localId = nextSocketId++
+//        val socket = AdbSocket(localId, this@AdbDevice)
+//        sockets.put(localId, socket)
+//        val job = launch {
+//            val openMessage = AdbMessage.generateOpenMessage(localId, "sync:")
+//            queueAdbMessage(openMessage)
+//            val responseMessage = adbMessageProducer.receive() ?: return@launch
+//            socket.setRemoteId(responseMessage.argumentZero)
+//            loge("Setup message $responseMessage")
+//            socket.remoteId = responseMessage.argumentZero
+//
+//            var b = ByteBuffer.allocate(4 + 4 + remotePath.length)
+//            b.put("STAT")
+//            b.putInt(Integer.reverseBytes(remotePath.length))
+//            b.put(remotePath)
+//
+//            val m = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, b.array())
+//            val q = queueAdbMessage(m)
+//            if (q) loge("success queueing") else loge("What do we do now")
+//            val queued = socket.sendWriteMessage(A_STAT, remotePath.toByteArray())
+//            if (queued) {
+//                loge("Queued")
+//            } else loge("Not queued no need reading")
+
+//            var message = /*device.*/adbMessageProducer.receive() //?: return@asyncExecute
+//            if (message == null) {
+//                loge("We got null")
+//                return//@launch
+//            }
+//            assert(message.command == A_OKAY)
+//            logd("Received okay: $message")
+//            queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
+//            closeSocket(socket)
+//            loge("Socket disposed")
             // TODO If directory, stat again with '/' else quit
 //            socket.sendWriteMessage(A_STAT, "$remotePath/".toByteArray())
 
@@ -347,7 +400,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
 //            loge("Done sending file $message")
 //            sendSubCommand(A_QUIT)
 
-        }
+//        }
         // TODO Dispose this handler on error, device close??
 //        job.invokeOnCompletion { throwable ->
 //            if (throwable != null) closeSocket(socket)

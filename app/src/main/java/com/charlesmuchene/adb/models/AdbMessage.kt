@@ -65,7 +65,7 @@ class AdbMessage {
      */
     private val dataPayloadAsString: String?
         get() = if (dataLength <= 0 || dataLength > MESSAGE_PAYLOAD) null
-        else String(payload.array(), 0, dataLength - 1)
+        else String(payload.array(), 0, dataLength)
 
     constructor()
 
@@ -189,6 +189,13 @@ class AdbMessage {
         }
         return result
     }
+
+    /**
+     * Get the file stat read in this message
+     *
+     * @return [FileStat]
+     */
+    fun getFileStat(): FileStat? = if (hasPayload()) FileStat(payload) else null
 
     override fun toString(): String {
         val commandName = String(header.array(), 0, 4)
