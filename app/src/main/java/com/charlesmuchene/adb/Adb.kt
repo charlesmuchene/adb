@@ -107,7 +107,8 @@ object Adb : AdbInterface {
 
     // TODO Call from aux thread
     override fun push(localPath: String, remotePath: String) {
-
+        val device = devices.values.firstOrNull() ?: return
+        device.sendFile(localPath, remotePath)
     }
 
     override fun install(apkPath: String, install: Boolean) {

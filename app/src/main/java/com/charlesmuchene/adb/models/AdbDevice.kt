@@ -25,6 +25,7 @@ import com.charlesmuchene.adb.utilities.*
 import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.withTimeout
+import java.nio.ByteBuffer
 import java.util.*
 
 /**
@@ -42,7 +43,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
 
-    private val outRequest: UsbRequest
+    val outRequest: UsbRequest
         get() = synchronized(outRequestPool) {
             return if (outRequestPool.isEmpty())
                 UsbRequest().apply { initialize(connection, outEndpoint) }
@@ -60,6 +61,11 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * An array of open sockets on this device
      */
     private val sockets = SparseArray<AdbSocket>()
+
+    /**
+     * Adb message producer
+     */
+    val adbMessageProducer by lazy { readAdbMessage() }
 
     init {
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
@@ -135,7 +141,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      *
      * @param request [UsbRequest] to release
      */
-    private fun releaseOutRequest(request: UsbRequest) {
+    fun releaseOutRequest(request: UsbRequest) {
         synchronized(outRequestPool) {
             outRequestPool.add(request)
         }
@@ -160,18 +166,6 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     private fun closeSocket(socket: AdbSocket) {
         sockets.remove(socket.localId)
         nextSocketId--
-    }
-
-    fun push() {
-        val socket = AdbSocket(nextSocketId++, this)
-        sockets.put(socket.localId, socket)
-        socket.openSocket("sync:")
-        val message = socket.read()
-
-        loge("We got $message")
-
-        socket.sendClose()
-        closeSocket(socket)
     }
 
     /**
@@ -225,31 +219,141 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         launch {
             val connectMessage = AdbMessage.generateConnectMessage()
             queueAdbMessage(connectMessage)
-            val producer = readAdbMessage()
-            val authMessage = producer.receive() ?: return@launch
-            assert(authMessage.command != A_AUTH)
-            val (type, payload) = if (signatureSent) {
-                val publicKey = Adb.getPublicKey()
-                Pair(RSAPUBLICKEY, publicKey)
-            } else {
-                signatureSent = true
-                val token = authMessage.getPayload()
-                val signature = Adb.signToken(token)
-                Pair(SIGNATURE, signature)
+            auth_loop@while (true) {
+                val authMessage = adbMessageProducer.receive() ?: break
+                when (authMessage.command) {
+                    A_AUTH -> {
+                        val (type, payload) = if (signatureSent) {
+                            val publicKey = Adb.getPublicKey()
+                            Pair(RSAPUBLICKEY, publicKey)
+                        } else {
+                            signatureSent = true
+                            val token = authMessage.getPayload()
+                            val signature = Adb.signToken(token)
+                            Pair(SIGNATURE, signature)
+                        }
+                        val nextMessage = AdbMessage.generateAuthMessage(type, payload)
+                        queueAdbMessage(nextMessage)
+                    }
+
+                    A_CNXN -> {
+                        if (authMessage.isDeviceOnline()) {
+                            logd("Device is online")
+                            isConnected = true
+                        } else {
+                            isConnected = false
+                            loge("Error performing device connection handshake ($authMessage)")
+                        }
+                        break@auth_loop
+                    }
+
+                    else -> {
+                        loge("Unknown command in: $authMessage")
+                        break@auth_loop
+                    }
+                }
             }
 
-            val nextMessage = AdbMessage.generateAuthMessage(type, payload)
-            queueAdbMessage(nextMessage)
-            val connectionMessage = producer.receive() ?: return@launch
-            assert(connectionMessage.command != A_CNXN)
-            if (connectionMessage.isDeviceOnline()) {
-                logd("Device is online")
-                isConnected = true
-            } else {
-                loge("Error performing adb device connection handshake")
-            }
+            /*val file = File(Adb.externalStorageLocation, "me.txt")
+            sendFile(file.absolutePath)*/
 
         }
+    }
+
+    /**
+     * Send a file
+     *
+     * @param localPath Local absolute file path
+     * @param remotePath Remote absolute file path
+     */
+    fun sendFile(localPath: String, remotePath: String = "sdcard") {
+        if (!isConnected) {
+            loge("Unauthorized device: Perform connection first.")
+            return
+        }
+        logd("Setting up send file socket...")
+        val localId = nextSocketId++
+        val socket = AdbSocket(localId, this@AdbDevice)
+        sockets.put(localId, socket)
+        val job = launch {
+            val openMessage = AdbMessage.generateOpenMessage(localId, "sync:")
+            queueAdbMessage(openMessage)
+            val responseMessage = adbMessageProducer.receive() ?: return@launch
+//            socket.setRemoteId(responseMessage.argumentZero)
+            loge("Setup message $responseMessage")
+            socket.remoteId = responseMessage.argumentZero
+
+            var b = ByteBuffer.allocate(4 + 4 + remotePath.length)
+            b.put("STAT")
+            b.putInt(Integer.reverseBytes(remotePath.length))
+            b.put(remotePath)
+
+            val m = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, b.array())
+            val q = queueAdbMessage(m)
+            if (q) loge("success queueing") else loge("What do we do now")
+//            val queued = socket.sendWriteMessage(A_STAT, remotePath.toByteArray())
+//            if (queued) {
+//                loge("Queued")
+//            } else loge("Not queued no need reading")
+
+            var message = /*device.*/adbMessageProducer.receive() //?: return@asyncExecute
+            if (message == null) {
+                loge("We got null")
+                return@launch
+            }
+//            assert(message.command == A_OKAY)
+            logd("Received okay: $message")
+            queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
+            closeSocket(socket)
+            loge("Socket disposed")
+            // TODO If directory, stat again with '/' else quit
+//            socket.sendWriteMessage(A_STAT, "$remotePath/".toByteArray())
+
+//            message = /*device.*/adbMessageProducer.receive() ?: return@launch
+//            loge("We got $message")
+//            assert(message.command == A_OKAY)
+
+//            val pathAndMode = "$remotePath,33188"
+//            val pathAndModeLength = pathAndMode.length
+//            if (pathAndModeLength > MAX_PATH_LENGTH) throw IllegalStateException("Path too long")
+//
+//            socket.sendWriteMessage(A_SEND, pathAndMode.toByteArray(), pathAndModeLength)
+
+//            val array = ByteArray(MESSAGE_PAYLOAD - SYNC_REQUEST_SIZE)
+//            val (lastModified, fileSize, stream) = openStream(localPath) ?: return@launch
+//
+//            val data = ByteArray(fileSize)
+//            val bytesRead = stream.read(data)
+//            assert(bytesRead == fileSize) // for small payload
+//            stream.close()
+//            val bufferLength = SYNC_REQUEST_SIZE * 3 + pathAndModeLength + bytesRead
+//            loge("Buffer length $bufferLength")
+//            val buffer = ByteBuffer.allocate(bufferLength).order(ByteOrder.LITTLE_ENDIAN)
+//            buffer.putInt(A_SEND)
+//                    .putInt(pathAndModeLength)
+//                    .put(pathAndMode)
+//                    .putInt(A_DATA)
+//                    .putInt(bytesRead)
+//                    .put(data)
+//                    .putInt(A_DONE)
+//                    .putInt(lastModified)
+//
+//            val smallPayloadMessage = AdbMessage.generateWriteMessage(localId, socket.remoteId, buffer.array())
+//            socket.write(smallPayloadMessage)
+//            sendWriteMessage(A_)
+//            socket.synchronousWrite(buffer.array())
+//            message = /*device.*/adbMessageProducer.receive() ?: return@launch
+//            assert(message.command == A_OKAY)
+//            loge("Done sending file $message")
+//            sendSubCommand(A_QUIT)
+
+        }
+        // TODO Dispose this handler on error, device close??
+//        job.invokeOnCompletion { throwable ->
+//            if (throwable != null) closeSocket(socket)
+//            else socket.sendFile(localPath, remotePath)
+//        }
+
     }
 
 }

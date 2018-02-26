@@ -16,6 +16,8 @@
 package com.charlesmuchene.adb.models
 
 import com.charlesmuchene.adb.utilities.*
+import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.withTimeout
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -25,7 +27,15 @@ import java.nio.ByteOrder
 class AdbSocket(val localId: Int, private val device: AdbDevice) {
 
     private val mode = 33188 // 0644
-    private var remoteId: Int = -1
+    /*private */var remoteId: Int = -1
+
+
+    /**
+     * Set the peer (remote) adb socket id
+     */
+//    fun setRemoteId(remoteId: Int) {
+//        this.remoteId = remoteId
+//    }
 
     /**
      * Open socket for stream
@@ -35,51 +45,6 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
     fun openSocket(command: String) {
         val message = AdbMessage.generateOpenMessage(localId, command)
         write(message)
-    }
-
-    /**
-     * Send file to device
-     *
-     * @param remotePath Remote path of the destination file
-     * @param localPath Local absolute path of file to send
-     */
-    private fun sendFile(remotePath: String, localPath: String) {
-
-        sendWriteMessage(A_STAT, remotePath.toByteArray())
-
-        // TODO Read -- Expect OKAY
-
-        // TODO If directory, stat again with '/' else quit
-        sendWriteMessage(A_STAT, "$remotePath/".toByteArray())
-
-        // TODO Read -- Expect OKAY
-
-        val pathAndMode = "$remotePath,$mode"
-        val pathAndModeLength = pathAndMode.length
-        if (pathAndModeLength > MAX_PATH_LENGTH) throw IllegalStateException("Path too long")
-
-        sendWriteMessage(A_SEND, pathAndMode.toByteArray(), pathAndModeLength)
-
-        val array = ByteArray(MESSAGE_PAYLOAD - SYNC_REQUEST_SIZE)
-        val (lastModified, _, stream) = openStream(localPath)
-        var bytesCopied = 0
-
-        while (true) {
-            val bytesRead = stream.read(array, 0, array.size)
-            if (bytesRead == -1) break
-            sendWriteMessage(A_DATA, array.copyOfRange(0, bytesRead), bytesRead)
-            bytesCopied += bytesRead
-            // TODO Report progress using file length
-        }
-
-        stream.close()
-        sendSubCommand(A_DONE, lastModified)
-
-        // TODO Read -- Expect OKAY
-
-        sendSubCommand(A_QUIT)
-
-        // TODO Read -- Expect OKAY
     }
 
     /**
@@ -103,26 +68,47 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
      * @param subCommand Command to send
      * @param data Path to stat
      * @param length Length of the data
+     * @return `true` if message queueing was successful, `false` otherwise
      */
-    private fun sendWriteMessage(subCommand: Int, data: ByteArray, length: Int = data.size) {
+    /*private */fun sendWriteMessage(subCommand: Int, data: ByteArray, length: Int = data.size)
+            : Boolean {
         val buffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + length)
                 .order(ByteOrder.LITTLE_ENDIAN)
         buffer.putInt(subCommand).putInt(length).put(data)
         val message = AdbMessage.generateWriteMessage(localId, remoteId, buffer.array())
-        write(message)
+        return write(message)
     }
 
     /**
      * Write data to device
      *
      * @param message Payload to send
-     *
-     * TODO Perform in aux thread
+     * @return `true` if success in queueing message, `false` otherwise
      */
-    private fun write(message: AdbMessage) {
+    /*private */fun write(message: AdbMessage): Boolean {
         // TODO Still check for smaller payloads
-        transfer(message.header.array())
-        if (message.hasPayload()) sendPayload(message.getPayload())
+        var request = device.outRequest
+        request.clientData = this
+        if (request.queue(message.header, MESSAGE_HEADER_LENGTH)) {
+            if (message.hasPayload()) {
+                request = device.outRequest
+                request.clientData = this
+
+                return if (request.queue(message.payload, message.dataLength)) {
+                    true
+                } else {
+                    device.releaseOutRequest(request)
+                    false
+                }
+            }
+            return true
+        } else {
+            device.releaseOutRequest(request)
+            return false
+        }
+
+//        transfer(message.header.array())
+//        if (message.hasPayload()) sendPayload(message.getPayload())
     }
 
     /**
@@ -225,6 +211,102 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
             A_OKAY -> logd(message.toString())
             A_WRTE -> logd(message.toString())
             else -> logw("Could not handle $message command")
+        }
+    }
+
+    /**
+     * Execute a block asynchronously
+     *
+     * @param block Block to execute
+     */
+    private fun asyncExecute(block: suspend () -> Unit) {
+        launch {
+            withTimeout(ADB_REQUEST_TIMEOUT) {
+                //                synchronized(device) {
+                block()
+//                }
+            }
+        }
+    }
+
+    /**
+     * Send file to device
+     *
+     * @param localPath Local absolute path of file to send
+     * @param remotePath Remote path of the destination file
+     *
+     */
+    fun sendFile(localPath: String, remotePath: String) {
+//        return
+        asyncExecute {
+            logd("Sending asynchronously")
+            val queued = sendWriteMessage(A_STAT, remotePath.toByteArray())
+            if (queued) {
+                loge("Queued")
+            } else loge("Not queued no need reading")
+
+            var message = device.adbMessageProducer.receive() //?: return@asyncExecute
+            if (message == null) {
+                loge("We got null")
+                return@asyncExecute
+            }
+            assert(message.command == A_OKAY)
+            logd("Received okay")
+            // TODO If directory, stat again with '/' else quit
+            sendWriteMessage(A_STAT, "$remotePath/".toByteArray())
+
+            message = device.adbMessageProducer.receive() ?: return@asyncExecute
+            assert(message.command == A_OKAY)
+
+            val pathAndMode = "$remotePath,$mode"
+            val pathAndModeLength = pathAndMode.length
+            if (pathAndModeLength > MAX_PATH_LENGTH) throw IllegalStateException("Path too long")
+
+            sendWriteMessage(A_SEND, pathAndMode.toByteArray(), pathAndModeLength)
+
+//            val array = ByteArray(MESSAGE_PAYLOAD - SYNC_REQUEST_SIZE)
+            val (lastModified, fileSize, stream) = openStream(localPath) ?: return@asyncExecute
+
+            val data = ByteArray(fileSize)
+            val bytesRead = stream.read(data)
+            assert(bytesRead == fileSize) // for small payload
+            stream.close()
+            val bufferLength = SYNC_REQUEST_SIZE * 3 + pathAndModeLength + bytesRead
+            loge("Buffer length $bufferLength")
+            val buffer = ByteBuffer.allocate(bufferLength).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.putInt(A_SEND)
+                    .putInt(pathAndModeLength)
+                    .put(pathAndMode)
+                    .putInt(A_DATA)
+                    .putInt(bytesRead)
+                    .put(data)
+                    .putInt(A_DONE)
+                    .putInt(lastModified)
+
+            val smallPayloadMessage = AdbMessage.generateWriteMessage(localId, remoteId, buffer.array())
+            write(smallPayloadMessage)
+//            sendWriteMessage(A_)
+//            socket.synchronousWrite(buffer.array())
+            message = device.adbMessageProducer.receive() ?: return@asyncExecute
+            assert(message.command == A_OKAY)
+//            var bytesCopied = 0
+
+//            while (true) {
+//                val bytesRead = stream.read(array, 0, array.size)
+//                if (bytesRead == -1) break
+//                sendWriteMessage(A_DATA, array.copyOfRange(0, bytesRead), bytesRead)
+//                bytesCopied += bytesRead
+//                 TODO Report progress using file length
+//            }
+
+
+//            sendSubCommand(A_DONE, lastModified)
+
+            // TODO Read -- Expect OKAY
+
+            sendSubCommand(A_QUIT)
+
+            // TODO Read -- Expect OKAY
         }
     }
 }
