@@ -217,6 +217,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Connect to the device. This performs the ADB Protocol connection
      * handshake.
      */
+    @Throws(IllegalStateException::class)
     fun connect() {
         launch {
             val connectMessage = AdbMessage.generateConnectMessage()
@@ -249,14 +250,20 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                         break@auth_loop
                     }
 
+                    A_CLSE -> {
+                        loge("Device requested to close bridge")
+                        isConnected = false
+                        break@auth_loop
+                    }
+
                     else -> {
                         loge("Unknown command in: $authMessage")
                         break@auth_loop
                     }
                 }
             }
-
-            val lpath = File(Adb.externalStorageLocation, "me.txt").absolutePath
+            val lfilename = "me.txt"
+            val lpath = File(Adb.externalStorageLocation, lfilename).absolutePath
             val rpath = "sdcard"
             if (!isConnected) {
                 loge("Unauthorized device: Perform connection first.")
@@ -307,6 +314,56 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             message = adbMessageProducer.receive() ?: return@launch
             loge("For with path we got $message")
             loge("And we have a ${message.getFileStat()}")
+
+            val okayMessage = AdbMessage.generateOkayMessage(socket.localId, socket.remoteId)
+            queueAdbMessage(okayMessage)
+
+            val mode = 33188
+            val absRemotePath = "$rpath/$lfilename"
+            val pathAndMode = "$absRemotePath,$mode"
+
+            val (lastModified, fileSize, stream) = openStream(lpath) ?: return@launch
+
+            if (fileSize < MAX_BUFFER_LENGTH) logd("Send small file")
+            else logd("Send a large file")
+
+            val pathAndModeLength = pathAndMode.length
+            @Suppress("ConstantConditionIf")
+            if (pathAndModeLength > MAX_PATH_LENGTH) {
+                stream.close()
+                loge("The provided path is too long.")
+                throw IllegalStateException("Destination path is too long")
+            }
+            logd("Sending file...")
+
+            val data = ByteArray(fileSize)
+            val bytesRead = stream.read(data)
+            stream.close()
+            logd("$bytesRead bytes read")
+            assert(bytesRead == fileSize, { "Error in assessing file size" })
+//             Buffer length = 3 * sync_request_size (8) + path_mode_length + actual_data_length
+            val bufferLength = 24 + pathAndModeLength + bytesRead
+            val buffer = ByteBuffer.allocate(bufferLength).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.putInt(A_SEND)
+                    .putInt(pathAndModeLength)
+                    .put(pathAndMode)
+                    .putInt(A_DATA)
+                    .putInt(bytesRead)
+                    .put(data)
+                    .putInt(A_DONE)
+                    .putInt(lastModified)
+            val dataMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, buffer.array())
+            loge("Sending $dataMessage")
+            queueAdbMessage(dataMessage)
+            message = adbMessageProducer.receive() ?: return@launch
+            loge("Got something: $message")
+//            loge("Sending small file done") // TODO Make it a debug log
+
+//            stream.close()
+            queueAdbMessage(AdbMessage.generateQuitMessage(socket.localId, socket.remoteId))
+            message = adbMessageProducer.receive() ?: return@launch
+            assert(message.command == A_OKAY)
+            loge("For Okay: Got $message ")
             queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
             closeSocket(socket)
             loge("Socket disposed")

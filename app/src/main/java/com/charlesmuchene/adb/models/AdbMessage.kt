@@ -249,7 +249,7 @@ class AdbMessage {
          * Generate write message
          *
          * @param localId Local socket id
-         * @param remoteId Remote socket id
+         * @param remoteId Remote (peer) socket id
          * @param data Payload
          * @return [AdbMessage] instance
          */
@@ -262,8 +262,8 @@ class AdbMessage {
         /**
          * Generate okay message
          *
-         * @param localId Local socket it
-         * @param remoteId Remote socket id
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
          * @return [AdbMessage] instance
          */
         fun generateOkayMessage(localId: Int, remoteId: Int): AdbMessage {
@@ -275,13 +275,25 @@ class AdbMessage {
         /**
          * Generate close message
          *
-         * @param localId Local socket it
-         * @param remoteId Remote socket id
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
          * @return [AdbMessage] instance
          */
         fun generateCloseMessage(localId: Int, remoteId: Int): AdbMessage {
             val message = AdbMessage()
             message[A_CLSE, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate a quit message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         */
+        fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_QUIT, localId] = remoteId
             return message
         }
 
