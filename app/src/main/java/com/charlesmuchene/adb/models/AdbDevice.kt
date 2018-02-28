@@ -356,15 +356,23 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             loge("Sending $dataMessage")
             queueAdbMessage(dataMessage)
             message = adbMessageProducer.receive() ?: return@launch
+            assert(message.command == A_OKAY)
             loge("Got something: $message")
 //            loge("Sending small file done") // TODO Make it a debug log
 
 //            stream.close()
             queueAdbMessage(AdbMessage.generateQuitMessage(socket.localId, socket.remoteId))
             message = adbMessageProducer.receive() ?: return@launch
-            assert(message.command == A_OKAY)
-            loge("For Okay: Got $message ")
+            loge("For Okay: Got $message ${message.getFileStat()}")
+            message = adbMessageProducer.receive() ?: return@launch
+            loge("Last okay $message")
+            queueAdbMessage(AdbMessage.generateOkayMessage(socket.localId, socket.remoteId))
+            queueAdbMessage(AdbMessage.generateQuitMessage(socket.localId, socket.remoteId))
+            message = adbMessageProducer.receive() ?: return@launch
+            loge("For quitting? $message")
             queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
+            message = adbMessageProducer.receive() ?: return@launch
+            loge("For close? $message")
             closeSocket(socket)
             loge("Socket disposed")
         }

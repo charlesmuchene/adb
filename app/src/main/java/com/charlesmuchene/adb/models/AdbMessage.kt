@@ -64,8 +64,18 @@ class AdbMessage {
      * Data payload as string
      */
     private val dataPayloadAsString: String?
-        get() = if (dataLength <= 0 || dataLength > MESSAGE_PAYLOAD) null
-        else String(payload.array(), 0, dataLength)
+        get() {
+            return if (dataLength <= 0 || dataLength > MESSAGE_PAYLOAD) null
+            else {
+//                val builder = StringBuilder()
+//                builder.append(String(payload.array(), 0, 4))
+//                val byteArray = payload.array().copyOfRange(4, 8)
+//
+//                builder.append(String(payload.array(), 8, dataLength))
+//                builder.toString()
+                String(payload.array(), 0, dataLength)
+            }
+        }
 
     constructor()
 
