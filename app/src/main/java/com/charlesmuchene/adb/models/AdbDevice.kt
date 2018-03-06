@@ -26,6 +26,8 @@ import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.withTimeout
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.*
 
 /**
@@ -277,6 +279,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             val lfilename = "passenger.jpeg"//"lufapplication.zip"//"me.txt"
             val lpath = File(Adb.externalStorageLocation, lfilename).absolutePath
             val rpath = "sdcard"
+            val mode = 33188
 //            logd("Setting up send file socket...")
             // TODO if path_length > 1024, path is too long
             val localId = nextSocketId++
@@ -286,9 +289,37 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             loge("Sending sync: $openMessage")
             queueAdbMessage(openMessage)
             var responseMessage = adbMessageProducer.receive() ?: return@launch
-            loge("Setup message $responseMessage")
             socket.remoteId = responseMessage.argumentZero
-            
+            loge("Setup message $responseMessage")
+
+            // ***********************************************************************************
+
+            val statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + rpath.length).order(ByteOrder.LITTLE_ENDIAN)
+            statBuffer.putInt(A_STAT).putInt(rpath.length).put(rpath)
+            val statMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, statBuffer.array())
+
+            queueAdbMessage(statMessage)
+            loge("Sent stat $statMessage")
+            adbMessageProducer.receive() ?: return@launch
+            queueAdbMessage(statMessage)
+            responseMessage = adbMessageProducer.receive() ?: return@launch
+            loge("Stat Got $responseMessage ${responseMessage.getFileStat()}")
+
+
+
+//            val pathAndMode = "$rpath,$mode"
+//            val pathAndModeLength = pathAndMode.length
+//            val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
+//                    .order(ByteOrder.LITTLE_ENDIAN)
+//            sendBuffer.putInt(A_SEND).putInt(pathAndModeLength).put(pathAndMode)
+//            val sendMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, sendBuffer.array())
+//            queueAdbMessage(sendMessage)
+//            loge("Sent $sendMessage")
+//            responseMessage = adbMessageProducer.receive() ?: return@launch
+//            loge("Got $responseMessage")
+
+            // ***********************************************************************************
+            loge("Closing bridge")
             queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
             closeSocket(socket)
             responseMessage = adbMessageProducer.receive() ?: return@launch
