@@ -282,31 +282,41 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             val mode = 33188
 //            logd("Setting up send file socket...")
             // TODO if path_length > 1024, path is too long
+            //            @Suppress("ConstantConditionIf")
+//            if (pathAndModeLength > MAX_PATH_LENGTH) {
+//                stream.close()
+//                loge("The provided path is too long.")
+//                throw IllegalStateException("Destination path is too long")
+//            }
             // TODO When you receive a WRTE, read the message and ack
             val localId = nextSocketId++
             val socket = AdbSocket(localId, this@AdbDevice)
             sockets.put(localId, socket)
             val openMessage = AdbMessage.generateOpenMessage(localId, "sync:")
-            loge("Sending sync: $openMessage")
+            loge("Send Sync: $openMessage")
             queueAdbMessage(openMessage)
             var responseMessage = adbMessageProducer.receive() ?: return@launch
             socket.remoteId = responseMessage.argumentZero
-            loge("Setup message $responseMessage")
+            loge("Sync Got $responseMessage")
 
             // ***********************************************************************************
 
-            val statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + rpath.length).order(ByteOrder.LITTLE_ENDIAN)
+            var statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + rpath.length).order(ByteOrder.LITTLE_ENDIAN)
             statBuffer.putInt(A_STAT).putInt(rpath.length).put(rpath)
-            val statMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, statBuffer.array())
-
+            var statMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, statBuffer.array())
             queueAdbMessage(statMessage)
             loge("Sent stat $statMessage")
-            adbMessageProducer.receive() ?: return@launch
-            queueAdbMessage(statMessage)
             responseMessage = adbMessageProducer.receive() ?: return@launch
             loge("Stat Got $responseMessage ${responseMessage.getFileStat()}")
+            statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + rpath.length + 1).order(ByteOrder.LITTLE_ENDIAN)
+            statBuffer.putInt(A_STAT).putInt(rpath.length + 1).put("$rpath/")
+            statMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, statBuffer.array())
+            queueAdbMessage(statMessage)
+            loge("Sent stat2 $statMessage")
+            responseMessage = adbMessageProducer.receive() ?: return@launch
+            loge("Stat2 Got $responseMessage ${responseMessage.getFileStat()}")
 
-            val pathAndMode = "$rpath,$mode"
+            val pathAndMode = "$rpath/$lfilename,$mode"
             val pathAndModeLength = pathAndMode.length
             val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
                     .order(ByteOrder.LITTLE_ENDIAN)
@@ -317,12 +327,43 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             responseMessage = adbMessageProducer.receive() ?: return@launch
             loge("Send Got $responseMessage")
 
+            val (lastModified, fileSize, stream) = openStream(lpath) ?: return@launch
+            loge("Opened file $lfilename modified on $lastModified with size $fileSize on path $lpath")
+            stream.use {file ->
+                var bytesCopied = 0
+                val dataArray = ByteArray(MAX_BUFFER_LENGTH - SYNC_REQUEST_SIZE)
+                var transfers = 0
+                while (true) {
+                    val bytesRead = file.read(dataArray)
+                    if (bytesRead == -1) break
+                    val dataBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + bytesRead).order(ByteOrder.LITTLE_ENDIAN)
+                    dataBuffer.putInt(A_DATA).putInt(bytesRead).put(dataArray, 0, bytesRead)
+                    val dataMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, dataBuffer.array())
+                    if (queueAdbMessage(dataMessage)) logd("Queued data") else loge("No data queued")
+                    bytesCopied += bytesRead
+                    responseMessage = adbMessageProducer.receive() ?: return@launch
+                    loge("In process $responseMessage -- ${++transfers}")
+                }
+            }
+            val doneBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+            doneBuffer.putInt(A_DONE).putInt(lastModified)
+            val doneMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, doneBuffer.array())
+            queueAdbMessage(doneMessage)
+            loge("Send Done $doneMessage")
+            responseMessage = adbMessageProducer.receive() ?: return@launch // Okay
+            loge("Done Got $responseMessage")
+            responseMessage = adbMessageProducer.receive() ?: return@launch //
+            loge("After done Got $responseMessage")
+//            responseMessage = adbMessageProducer.receive() ?: return@launch // STAT
+//            loge("After done again Got $responseMessage ${responseMessage.getFileStat()}")
+
             // ***********************************************************************************
+
             loge("Closing bridge")
             queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
             closeSocket(socket)
             responseMessage = adbMessageProducer.receive() ?: return@launch
-            loge("Got $responseMessage")
+            loge("Close Got $responseMessage")
             loge("Bridge closed")
 
 //            val openMessage = AdbMessage.generateOpenMessage(localId, "sync:")
@@ -454,6 +495,8 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
 //            loge("For close? $message")
 //            closeSocket(socket)
 //            loge("Socket disposed")
+        }.invokeOnCompletion {
+            loge("We are over launch now... :D")
         }
     }
 

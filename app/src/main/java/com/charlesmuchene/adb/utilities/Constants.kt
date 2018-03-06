@@ -55,7 +55,7 @@ const val SYNC_REQUEST_SIZE = 8
 /**
  * Request timeout
  */
-const val ADB_REQUEST_TIMEOUT = 2_000L
+const val ADB_REQUEST_TIMEOUT = 1_000L
 
 /**
  * Adb sync request constants
