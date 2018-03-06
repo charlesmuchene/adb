@@ -282,6 +282,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             val mode = 33188
 //            logd("Setting up send file socket...")
             // TODO if path_length > 1024, path is too long
+            // TODO When you receive a WRTE, read the message and ack
             val localId = nextSocketId++
             val socket = AdbSocket(localId, this@AdbDevice)
             sockets.put(localId, socket)
@@ -305,18 +306,16 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             responseMessage = adbMessageProducer.receive() ?: return@launch
             loge("Stat Got $responseMessage ${responseMessage.getFileStat()}")
 
-
-
-//            val pathAndMode = "$rpath,$mode"
-//            val pathAndModeLength = pathAndMode.length
-//            val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
-//                    .order(ByteOrder.LITTLE_ENDIAN)
-//            sendBuffer.putInt(A_SEND).putInt(pathAndModeLength).put(pathAndMode)
-//            val sendMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, sendBuffer.array())
-//            queueAdbMessage(sendMessage)
-//            loge("Sent $sendMessage")
-//            responseMessage = adbMessageProducer.receive() ?: return@launch
-//            loge("Got $responseMessage")
+            val pathAndMode = "$rpath,$mode"
+            val pathAndModeLength = pathAndMode.length
+            val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+            sendBuffer.putInt(A_SEND).putInt(pathAndModeLength).put(pathAndMode)
+            val sendMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, sendBuffer.array())
+            queueAdbMessage(sendMessage)
+            loge("Sent send $sendMessage")
+            responseMessage = adbMessageProducer.receive() ?: return@launch
+            loge("Send Got $responseMessage")
 
             // ***********************************************************************************
             loge("Closing bridge")
