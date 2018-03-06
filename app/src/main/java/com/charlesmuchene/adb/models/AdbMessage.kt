@@ -111,9 +111,21 @@ class AdbMessage {
      */
     fun getPayload(): ByteArray {
         return when {
-            dataLength <= 0 -> return ByteArray(0)
+            !hasPayload() -> ByteArray(0)
             dataLength == MESSAGE_PAYLOAD -> payload.array()
             else -> payload.array().copyOfRange(0, dataLength)
+        }
+    }
+
+    /**
+     * Get the message's total payload: header + payload
+     *
+     * @return [ByteArray] of the message's header and payload
+     */
+    fun asPayload(): ByteArray {
+        return when {
+            !hasPayload() -> header.array()
+            else -> header.array() + payload.array()
         }
     }
 
@@ -304,6 +316,17 @@ class AdbMessage {
         fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
             val message = AdbMessage()
             message[A_QUIT, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate a sync message
+         *
+         * @return [AdbMessage] instance
+         */
+        fun generateSyncMessage(): AdbMessage {
+            val message = AdbMessage()
+            message[A_SYNC, 0] = 0
             return message
         }
 
