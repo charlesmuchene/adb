@@ -44,12 +44,11 @@ fun logw(message: String) = Timber.w(message)
 /**
  * Open a input stream to a local file
  *
- * @param path Absolute path to a file
- * @return [Triple] for last modified time, length and stream to the given file
+ * @param file [File] to send
+ * @return [Triple] for last modified time, length and stream of the given file
  */
-fun openStream(path: String): Triple<Int, Int, FileInputStream>? {
+fun openStream(file: File): Triple<Int, Int, FileInputStream>? {
     return try {
-        val file = File(path)
         Triple((file.lastModified() / 1000).toInt(), file.length().toInt(), FileInputStream(file))
     } catch (e: Exception) {
         loge(e.localizedMessage)

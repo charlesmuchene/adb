@@ -26,8 +26,6 @@ import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.withTimeout
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.*
 
 /**
@@ -81,7 +79,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * @param message [AdbMessage] to queue on
      * @return `true` if the queue request was successful, `false` otherwise
      */
-    private fun queueAdbMessage(message: AdbMessage): Boolean {
+    fun queueAdbMessage(message: AdbMessage): Boolean {
         synchronized(this) {
             val request = outRequest
             request.clientData = message
@@ -165,7 +163,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      *
      * @param socket [AdbSocket] to close
      */
-    private fun closeSocket(socket: AdbSocket) {
+    fun closeSocket(socket: AdbSocket) {
         sockets.remove(socket.localId)
         nextSocketId--
     }
@@ -281,74 +279,10 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * @param remotePath Remote absolute file path
      */
     fun sendFile(localPath: String, remotePath: String = "sdcard") {
-        // TODO When you receive a WRTE, read the message and ack
-        launch {
-            val localFile = File(localPath)
-            val localFilename = localFile.name
-            val mode = 33188 // TODO Use local file permissions
-            val localId = nextSocketId++
-            val socket = AdbSocket(localId, this@AdbDevice)
-            sockets.put(localId, socket)
-            val openMessage = AdbMessage.generateOpenMessage(localId, "sync:")
-            queueAdbMessage(openMessage)
-            var responseMessage = adbMessageProducer.receive() ?: return@launch
-            socket.remoteId = responseMessage.argumentZero
-
-            var statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + remotePath.length).order(ByteOrder.LITTLE_ENDIAN)
-            statBuffer.putInt(A_STAT).putInt(remotePath.length).put(remotePath)
-            var statMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, statBuffer.array())
-            queueAdbMessage(statMessage)
-            responseMessage = adbMessageProducer.receive() ?: return@launch
-            statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + remotePath.length + 1).order(ByteOrder.LITTLE_ENDIAN)
-            statBuffer.putInt(A_STAT).putInt(remotePath.length + 1).put("$remotePath/")
-            statMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, statBuffer.array())
-            queueAdbMessage(statMessage)
-            responseMessage = adbMessageProducer.receive() ?: return@launch
-
-            val pathAndMode = "$remotePath/$localFilename,$mode"
-
-            val pathAndModeLength = pathAndMode.length
-            if (pathAndModeLength > MAX_PATH_LENGTH) {
-                loge("The provided path is too long.")
-                throw IllegalStateException("Destination path is too long")
-            }
-            val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
-                    .order(ByteOrder.LITTLE_ENDIAN)
-            sendBuffer.putInt(A_SEND).putInt(pathAndModeLength).put(pathAndMode)
-            val sendMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, sendBuffer.array())
-            queueAdbMessage(sendMessage)
-            responseMessage = adbMessageProducer.receive() ?: return@launch
-
-            val (lastModified, fileSize, stream) = openStream(localPath) ?: return@launch
-            stream.use { file ->
-                var bytesCopied = 0
-                val dataArray = ByteArray(MAX_BUFFER_LENGTH - SYNC_REQUEST_SIZE)
-                while (true) {
-                    val bytesRead = file.read(dataArray)
-                    if (bytesRead == -1) break
-                    val dataBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + bytesRead).order(ByteOrder.LITTLE_ENDIAN)
-                    dataBuffer.putInt(A_DATA).putInt(bytesRead).put(dataArray, 0, bytesRead)
-                    val dataMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, dataBuffer.array())
-                    queueAdbMessage(dataMessage)
-                    bytesCopied += bytesRead
-                    responseMessage = adbMessageProducer.receive() ?: return@launch
-                }
-                val transferred = 100 * bytesCopied / fileSize
-                logd("Transferred $transferred% of $localFilename to $remotePath")
-            }
-            val doneBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE).order(ByteOrder.LITTLE_ENDIAN)
-            doneBuffer.putInt(A_DONE).putInt(lastModified)
-            val doneMessage = AdbMessage.generateWriteMessage(socket.localId, socket.remoteId, doneBuffer.array())
-            queueAdbMessage(doneMessage)
-            responseMessage = adbMessageProducer.receive() ?: return@launch
-            responseMessage = adbMessageProducer.receive() ?: return@launch
-
-            logd("Closing bridge...")
-            queueAdbMessage(AdbMessage.generateCloseMessage(socket.localId, socket.remoteId))
-            responseMessage = adbMessageProducer.receive() ?: return@launch
-            closeSocket(socket)
-            logd("Bridge closed")
-        }
+        val localId = nextSocketId++
+        val socket = AdbSocket(localId, this@AdbDevice)
+        sockets.put(localId, socket)
+        socket.sendFile(localPath, remotePath)
     }
 
 }
