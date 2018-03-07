@@ -15,10 +15,7 @@
 
 package com.charlesmuchene.adb.models
 
-import com.charlesmuchene.adb.utilities.A_CNXN
-import com.charlesmuchene.adb.utilities.A_VERSION
-import com.charlesmuchene.adb.utilities.MESSAGE_HEADER_LENGTH
-import com.charlesmuchene.adb.utilities.MESSAGE_PAYLOAD
+import com.charlesmuchene.adb.utilities.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -67,20 +64,31 @@ class AdbMessage {
      * Data payload as string
      */
     private val dataPayloadAsString: String?
-        get() = if (dataLength <= 0 || dataLength >= MESSAGE_PAYLOAD) null
-        else String(payload.array(), 0, dataLength - 1)
+        get() {
+            return if (dataLength <= 0 || dataLength > MESSAGE_PAYLOAD) null
+            else {
+                String(payload.array(), 0, dataLength)
+            }
+        }
 
     constructor()
 
     /**
      * Constructor
      *
-     * @param payload [ByteArray] to construct the message with
+     * @param header [ByteBuffer] to construct the message with
      */
-    constructor(payload: ByteArray) {
-        header.put(payload, 0, MESSAGE_HEADER_LENGTH)
-//        if (hasPayload())
-//            payload.put(payload, MESSAGE_HEADER_LENGTH, payload.size)
+    constructor(header: ByteBuffer) {
+        this.header.put(header)
+    }
+
+    /**
+     * Add a payload to this message.
+     *
+     * @param payload [ByteBuffer] to add
+     */
+    fun addPayload(payload: ByteBuffer) {
+        header.put(payload)
     }
 
     /**
@@ -97,10 +105,32 @@ class AdbMessage {
      */
     fun getPayload(): ByteArray {
         return when {
-            dataLength <= 0 -> return ByteArray(0)
+            !hasPayload() -> ByteArray(0)
             dataLength == MESSAGE_PAYLOAD -> payload.array()
             else -> payload.array().copyOfRange(0, dataLength)
         }
+    }
+
+    /**
+     * Get the message's total payload: header + payload
+     *
+     * @return [ByteArray] of the message's header and payload
+     */
+    fun asPayload(): ByteArray {
+        return when {
+            !hasPayload() -> header.array()
+            else -> header.array() + payload.array()
+        }
+    }
+
+    /**
+     * Check if devices is online as reported back in this message
+     *
+     * @return `true` if device is online, `false` otherwise
+     */
+    fun isDeviceOnline(): Boolean {
+        return if (dataPayloadAsString == null) false
+        else dataPayloadAsString?.startsWith("device") ?: false
     }
 
     /**
@@ -177,19 +207,14 @@ class AdbMessage {
     }
 
     /**
-     * Extract a string from the header buffer
+     * Get the file stat read in this message
      *
-     * @param offset Starting index on the buffer
-     * @param length Length of the read
-     * @return The read string
+     * @return [FileStat]
      */
-    private fun readString(offset: Int = 0, length: Int = 4): String {
-        header.clear()
-        return String(header.array(), offset, length)
-    }
+    fun getFileStat(): FileStat? = if (hasPayload()) FileStat(payload) else null
 
     override fun toString(): String {
-        val commandName = readString()
+        val commandName = String(header.array(), 0, 4)
         var string = "Message: $commandName Arg0: $argumentZero Arg1: $argumentOne " +
                 "DataLength: $dataLength"
         if (hasPayload()) string += " Data: $dataPayloadAsString"
@@ -201,10 +226,101 @@ class AdbMessage {
 
         /**
          * Generate a connect message
+         *
+         * @return [AdbMessage] instance
          */
         fun generateConnectMessage(): AdbMessage {
             val message = AdbMessage()
             message[A_CNXN, A_VERSION, MESSAGE_PAYLOAD] = "host::charlo"
+            return message
+        }
+
+        /**
+         * Generate an auth message
+         *
+         * @param type A public key or signature
+         * @param payload Payload
+         * @return [AdbMessage] instance
+         */
+        fun generateAuthMessage(type: Int, payload: ByteArray): AdbMessage {
+            val message = AdbMessage()
+            message[A_AUTH, type, 0] = payload
+            return message
+        }
+
+        /**
+         * Generate open message
+         *
+         * @param localId Local socket id
+         * @param command Command to open socket for
+         * @return [AdbMessage] instance
+         */
+        fun generateOpenMessage(localId: Int, command: String): AdbMessage {
+            val message = AdbMessage()
+            message[A_OPEN, localId, 0] = command
+            return message
+        }
+
+        /**
+         * Generate write message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         * @param data Payload
+         * @return [AdbMessage] instance
+         */
+        fun generateWriteMessage(localId: Int, remoteId: Int, data: ByteBuffer): AdbMessage {
+            val message = AdbMessage()
+            message[A_WRTE, localId, remoteId] = data
+            return message
+        }
+
+        /**
+         * Generate okay message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         * @return [AdbMessage] instance
+         */
+        fun generateOkayMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_OKAY, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate close message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         * @return [AdbMessage] instance
+         */
+        fun generateCloseMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_CLSE, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate a quit message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         */
+        fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_QUIT, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate a sync message
+         *
+         * @return [AdbMessage] instance
+         */
+        fun generateSyncMessage(): AdbMessage {
+            val message = AdbMessage()
+            message[A_SYNC, 0] = 0
             return message
         }
 

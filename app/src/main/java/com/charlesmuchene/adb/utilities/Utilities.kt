@@ -17,15 +17,41 @@
 package com.charlesmuchene.adb.utilities
 
 import timber.log.Timber
+import java.io.File
+import java.io.FileInputStream
 
 /**
- * Debug log
+ * Log a debug message
  *
  * @param message Message to log
  */
 fun logd(message: String) = Timber.d(message)
 
 /**
- * Error log
+ * Log an error message
+ *
+ * @param message Message to log
  */
 fun loge(message: String) = Timber.e(message)
+
+/**
+ * Log a warning with the given message
+ *
+ * @param message Message to log
+ */
+fun logw(message: String) = Timber.w(message)
+
+/**
+ * Open a input stream to a local file
+ *
+ * @param file [File] to send
+ * @return [Triple] for last modified time, length and stream of the given file
+ */
+fun openStream(file: File): Triple<Int, Int, FileInputStream>? {
+    return try {
+        Triple((file.lastModified() / 1000).toInt(), file.length().toInt(), FileInputStream(file))
+    } catch (e: Exception) {
+        loge(e.localizedMessage)
+        null
+    }
+}

@@ -1,1 +1,2 @@
 app/src/main/cpp/boringssl/* linguist-vendored
+app/src/main/app/libcrypto_utils/* linguist-vendored

@@ -20,7 +20,7 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import com.charlesmuchene.adb.utilities.Adb
+import com.charlesmuchene.adb.Adb
 
 /**
  * Usb connection broadcast receiver

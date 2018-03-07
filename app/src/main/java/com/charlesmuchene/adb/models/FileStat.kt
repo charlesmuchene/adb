@@ -13,31 +13,22 @@
  * limitations under the License.
  */
 
-package com.charlesmuchene.adb
+package com.charlesmuchene.adb.models
 
-import android.app.Application
-import android.content.Context
-import android.hardware.usb.UsbManager
-import timber.log.Timber
+import java.nio.ByteBuffer
 
 /**
- * Adb application
+ * Remote path stat
  */
-class AdbApplication : Application() {
+class FileStat(payload: ByteBuffer) {
+    val id: String = String(payload.array(), 0, 4)
+    val mode: Int = payload.getInt(4)
+    val size: Int = payload.getInt(8)
+    val time: Int = payload.getInt(12)
+    val nameLength: Int = payload.getInt(16)
 
-    override fun onCreate() {
-        super.onCreate()
-
-        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        val keyPath = filesDir.absolutePath
-        Adb.initialize(usbManager, keyPath)
-
-        Timber.plant(Timber.DebugTree())
+    override fun toString(): String {
+        return "FileStat(id='$id', mode=$mode, size=$size, time=$time, nameLength=$nameLength)"
     }
 
-    companion object {
-        init {
-            System.loadLibrary("adb")
-        }
-    }
 }

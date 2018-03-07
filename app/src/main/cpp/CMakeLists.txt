@@ -8,7 +8,7 @@ find_library(logger log)
 
 set(EXTRA_LIBS ${logger})
 
-set(SOURCES adb.cpp libcrypto_utils/android_pubkey.c)
+set(SOURCES adb.cpp auth.cpp libcrypto_utils/android_pubkey.c)
 
 add_library(crypto STATIC IMPORTED)
 

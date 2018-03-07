@@ -14,8 +14,41 @@
  */
 
 #include "include/adb.h"
+#include <auth.h>
 
-void Java_com_charlesmuchene_adb_AdbApplication_initializeAdb(JNIEnv *, jobject) {
-	std::string message = "Initializing adb...";
-	D("%s", message.c_str());
+void Java_com_charlesmuchene_adb_Adb_initializeAdb(JNIEnv *env, jobject, jstring path) {
+
+	D("Initializing adb...");
+	const char *keyPath = (std::string(env->GetStringUTFChars(path, 0)) + "/adbkey").c_str();
+	generateAdbKey(keyPath);
+	env->ReleaseStringUTFChars(path, keyPath);
+
+}
+
+jbyteArray Java_com_charlesmuchene_adb_Adb_signToken(JNIEnv *env, jobject,
+                                                               jbyteArray token,
+                                                               jstring path) {
+	const char *keyPath = (std::string(env->GetStringUTFChars(path, 0)) + "/adbkey").c_str();
+	int length = env->GetArrayLength(token);
+	char tokenBuffer[length];
+	env->GetByteArrayRegion(token, 0, length, reinterpret_cast<jbyte *>(tokenBuffer));
+	std::vector<char> signature = signToken(tokenBuffer, (size_t) length, keyPath);
+	env->ReleaseStringUTFChars(path, keyPath);
+	int len = signature.size();
+	jbyteArray array = env->NewByteArray(len);
+	env->SetByteArrayRegion(array, 0, len, (const jbyte *) &signature[0]);
+	return array;
+}
+
+jbyteArray Java_com_charlesmuchene_adb_Adb_getPublicKey(JNIEnv *env, jobject,
+                                                                  jstring path) {
+	const char *pathUTFChars = env->GetStringUTFChars(path, 0);
+	auto constructedPath = std::string(pathUTFChars) + "/adbkey.pub";
+	const char *keyPath = constructedPath.c_str();
+	std::vector<char> publicKey = getPublicKey(keyPath);
+	env->ReleaseStringUTFChars(path, pathUTFChars);
+	int len = publicKey.size();
+	jbyteArray array = env->NewByteArray(len);
+	env->SetByteArrayRegion(array, 0, len, (const jbyte *) &publicKey[0]);
+	return array;
 }

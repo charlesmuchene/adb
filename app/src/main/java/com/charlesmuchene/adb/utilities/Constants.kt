@@ -37,6 +37,27 @@ const val MESSAGE_HEADER_LENGTH = 24
 const val MESSAGE_PAYLOAD = MAX_BUFFER_LENGTH // 65_536 for SDK_INT <= 26
 
 /**
+ * AUTH constants
+ */
+const val SIGNATURE = 2
+const val RSAPUBLICKEY = 3
+
+/**
+ * Maximum path length
+ */
+const val MAX_PATH_LENGTH = 1_024
+
+/**
+ * Sync request size
+ */
+const val SYNC_REQUEST_SIZE = 8
+
+/**
+ * Request timeout
+ */
+const val ADB_REQUEST_TIMEOUT = 1_000L
+
+/**
  * Adb sync request constants
  */
 const val A_SYNC = 0x434e5953

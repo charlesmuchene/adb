@@ -19,7 +19,13 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbRequest
+import android.util.SparseArray
+import com.charlesmuchene.adb.Adb
 import com.charlesmuchene.adb.utilities.*
+import kotlinx.coroutines.experimental.channels.produce
+import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.withTimeout
+import java.io.File
 import java.util.*
 
 /**
@@ -27,9 +33,11 @@ import java.util.*
  */
 class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDeviceConnection) {
 
-    val outEndpoint: UsbEndpoint
-    private var connected = false
+    private var nextSocketId = 1
+    private var isConnected = false
     private val inEndpoint: UsbEndpoint
+    private val outEndpoint: UsbEndpoint
+    private var signatureSent = false
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
 
@@ -48,9 +56,14 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         }
 
     /**
-     * Adb thread
+     * An array of open sockets on this device
      */
-    private val adbThread = AdbThread()
+    private val sockets = SparseArray<AdbSocket>()
+
+    /**
+     * Adb message producer
+     */
+    val adbMessageProducer by lazy { readAdbMessage() }
 
     init {
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
@@ -59,55 +72,12 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     }
 
     /**
-     * Connect to the device. This performs the ADB Protocol connection
-     * handshake.
-     */
-    fun connect() {
-        adbThread.start()
-        val connectMessage = AdbMessage.generateConnectMessage()
-        val result = queueAdbMessage(connectMessage)
-        if (!result) {
-            adbThread.interrupt()
-            close()
-            loge("Error queueing connect message")
-        }
-    }
-
-    /**
-     * Process the dispatched message
-     *
-     * @param message [AdbMessage] to process
-     */
-    private fun dispatchMessage(message: AdbMessage) {
-
-        when (message.command) {
-            A_AUTH -> {
-                // TODO Send authentication
-                logd("Send authentication")
-            }
-
-            A_CNXN -> {
-                // TODO We are happy people
-                logd("Start sending")
-                connected = true
-            }
-
-            A_CLSE -> {
-                connected = false
-                close()
-            }
-        }
-
-        adbThread.interrupt()
-    }
-
-    /**
      * Queue request with the given adb message
      *
      * @param message [AdbMessage] to queue on
      * @return `true` if the queue request was successful, `false` otherwise
      */
-    private fun queueAdbMessage(message: AdbMessage): Boolean {
+    fun queueAdbMessage(message: AdbMessage): Boolean {
         synchronized(this) {
             val request = outRequest
             request.clientData = message
@@ -131,7 +101,9 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Close the adb device
      */
     fun close() {
-        // TODO Stop all ongoing actions
+        assert(sockets.size() == 0) // TODO Find out why and perform close
+        isConnected = false
+        signatureSent = false
         connection.releaseInterface(usbInterface)
         connection.close()
     }
@@ -185,38 +157,47 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     }
 
     /**
-     * Adb Thread
+     * Close the given socket
+     *
+     * @param socket [AdbSocket] to close
      */
-    private inner class AdbThread : Thread("AdbThread") {
-        override fun run() {
-            super.run()
-            var currentCommand: AdbMessage? = AdbMessage()
-            var currentData: AdbMessage? = null
-            readHeader(currentCommand!!)
+    fun closeSocket(socket: AdbSocket) {
+        sockets.remove(socket.localId)
+        nextSocketId--
+    }
+
+    /**
+     * Read an adb message asynchronously
+     */
+    private fun readAdbMessage() = produce {
+        withTimeout(ADB_REQUEST_TIMEOUT) {
+            var incomingData: AdbMessage? = null
+            var incomingCommand: AdbMessage? = AdbMessage()
+            incomingCommand?.let(::readHeader)
 
             while (true) {
-                if (isInterrupted) break
+                if (!isActive) break
                 val request = connection.requestWait() ?: break
-                val message = request.clientData as AdbMessage
+                val receivedMessage = request.clientData as AdbMessage
                 request.clientData = null
                 var dispatchedMessage: AdbMessage? = null
-                if (message === currentCommand) {
-                    if (message.hasPayload()) {
-                        readPayload(message)
-                        currentData = message
+                if (receivedMessage === incomingCommand) {
+                    if (receivedMessage.hasPayload()) {
+                        readPayload(receivedMessage)
+                        incomingData = receivedMessage
                     } else {
-                        dispatchedMessage = message
+                        dispatchedMessage = receivedMessage
                     }
-                    currentCommand = null
-                } else if (message === currentData) {
-                    dispatchedMessage = message
-                    currentData = null
+                    incomingCommand = null
+                } else if (receivedMessage === incomingData) {
+                    dispatchedMessage = receivedMessage
+                    incomingData = null
                 }
 
                 if (dispatchedMessage != null) {
-                    currentCommand = AdbMessage()
-                    readHeader(currentCommand)
-                    dispatchMessage(dispatchedMessage)
+                    incomingCommand = AdbMessage()
+                    readHeader(incomingCommand)
+                    send(dispatchedMessage)
                 }
 
                 if (request.endpoint === outEndpoint) {
@@ -226,6 +207,82 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                 }
             }
         }
+    }
+
+    /**
+     * Connect to the device. This performs the ADB Protocol connection
+     * handshake.
+     */
+    @Throws(IllegalStateException::class)
+    fun connect() {
+        launch {
+            val connectMessage = AdbMessage.generateConnectMessage()
+            queueAdbMessage(connectMessage)
+            var safetySentinel = 0
+            auth_loop@ while (true) {
+                val authMessage = adbMessageProducer.receive() ?: break
+                when (authMessage.command) {
+                    A_AUTH -> {
+                        val (type, payload) = if (signatureSent) {
+                            val publicKey = Adb.getPublicKey()
+                            Pair(RSAPUBLICKEY, publicKey)
+                        } else {
+                            signatureSent = true
+                            val token = authMessage.getPayload()
+                            val signature = Adb.signToken(token)
+                            Pair(SIGNATURE, signature)
+                        }
+                        val nextMessage = AdbMessage.generateAuthMessage(type, payload)
+                        queueAdbMessage(nextMessage)
+                    }
+
+                    A_CNXN -> {
+                        if (authMessage.isDeviceOnline()) {
+                            logd("Device is online")
+                            isConnected = true
+                        } else {
+                            isConnected = false
+                            loge("Error performing device connection handshake ($authMessage)")
+                        }
+                        break@auth_loop
+                    }
+
+                    else -> {
+                        val syncMessage = AdbMessage.generateSyncMessage()
+                        queueAdbMessage(syncMessage)
+                        loge("Invalid command: $authMessage")
+                        queueAdbMessage(connectMessage)
+                    }
+                }
+                if (++safetySentinel == 256) {
+                    loge("Error with authentication. Done retrying.")
+                    isConnected = false
+                    break@auth_loop
+                }
+            }
+
+        }.invokeOnCompletion {
+            if (!isConnected) {
+                loge("Device is not initialized properly. Retry initialization.")
+            } else {
+                val localFilename = "passenger.jpeg"
+                val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
+                sendFile(localPath)
+            }
+        }
+    }
+
+    /**
+     * Send a file
+     *
+     * @param localPath Local absolute file path
+     * @param remotePath Remote absolute file path
+     */
+    fun sendFile(localPath: String, remotePath: String = "sdcard") {
+        val localId = nextSocketId++
+        val socket = AdbSocket(localId, this@AdbDevice)
+        sockets.put(localId, socket)
+        socket.sendFile(localPath, remotePath)
     }
 
 }
