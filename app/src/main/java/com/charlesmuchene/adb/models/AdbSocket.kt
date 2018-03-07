@@ -72,10 +72,10 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
      *
      * @param localPath Local absolute path of file to send
      * @param remotePath Remote path of the destination file
-     *
      */
     fun sendFile(localPath: String, remotePath: String) {
         launch {
+            // TODO Make sending file robust using loop and reading writes from device
             val localFile = File(localPath)
             val localFilename = localFile.name
             val mode = 33188 // TODO Use local file permissions

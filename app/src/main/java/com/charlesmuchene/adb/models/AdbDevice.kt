@@ -33,17 +33,15 @@ import java.util.*
  */
 class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDeviceConnection) {
 
-    var nextSocketId = 1
-        private set
-    var isConnected = false
-        private set
-    val inEndpoint: UsbEndpoint
-    val outEndpoint: UsbEndpoint
+    private var nextSocketId = 1
+    private var isConnected = false
+    private val inEndpoint: UsbEndpoint
+    private val outEndpoint: UsbEndpoint
     private var signatureSent = false
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
 
-    val outRequest: UsbRequest
+    private val outRequest: UsbRequest
         get() = synchronized(outRequestPool) {
             return if (outRequestPool.isEmpty())
                 UsbRequest().apply { initialize(connection, outEndpoint) }
@@ -262,13 +260,15 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                     break@auth_loop
                 }
             }
+
+        }.invokeOnCompletion {
             if (!isConnected) {
                 loge("Device is not initialized properly. Retry initialization.")
-                return@launch
+            } else {
+                val localFilename = "passenger.jpeg"
+                val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
+                sendFile(localPath)
             }
-            val localFilename = "passenger.jpeg"
-            val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
-            sendFile(localPath)
         }
     }
 
