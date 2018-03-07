@@ -51,7 +51,7 @@ class AdbMessage {
     /**
      * Argument one
      */
-    val argumentOne: Int
+    private val argumentOne: Int
         get() = header.getInt(8)
 
     /**
@@ -70,26 +70,6 @@ class AdbMessage {
                 String(payload.array(), 0, dataLength)
             }
         }
-
-    constructor()
-
-    /**
-     * Constructor
-     *
-     * @param header [ByteBuffer] to construct the message with
-     */
-    constructor(header: ByteBuffer) {
-        this.header.put(header)
-    }
-
-    /**
-     * Add a payload to this message.
-     *
-     * @param payload [ByteBuffer] to add
-     */
-    fun addPayload(payload: ByteBuffer) {
-        header.put(payload)
-    }
 
     /**
      * Check if message has data payload

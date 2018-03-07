@@ -265,7 +265,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
             if (!isConnected) {
                 loge("Device is not initialized properly. Retry initialization.")
             } else {
-                val localFilename = "passenger.jpeg"
+                val localFilename = "me.txt"
                 val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
                 sendFile(localPath)
             }
