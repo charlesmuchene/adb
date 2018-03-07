@@ -1,6 +1,6 @@
 buildscript {
     ext{
-        kotlinVersion = '1.2.21'
+        kotlinVersion = '1.2.30'
         androidGradleVersion = '3.0.1'
     }
 
@@ -32,5 +32,5 @@ ext {
     coroutineVersion = '0.19.3'
     testRunnerVersion = '1.0.1'
     constraintVersion = '1.0.2'
-    supportLibVersion = '27.0.2'
+    supportLibVersion = '27.1.0'
 }
