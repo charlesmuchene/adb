@@ -139,7 +139,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      *
      * @param request [UsbRequest] to release
      */
-    fun releaseOutRequest(request: UsbRequest) {
+    private fun releaseOutRequest(request: UsbRequest) {
         synchronized(outRequestPool) {
             outRequestPool.add(request)
         }
@@ -171,9 +171,9 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      */
     private fun readAdbMessage() = produce {
         withTimeout(ADB_REQUEST_TIMEOUT) {
-            var currentData: AdbMessage? = null
-            var currentCommand: AdbMessage? = AdbMessage()
-            currentCommand?.let { readHeader(it) }
+            var incomingData: AdbMessage? = null
+            var incomingCommand: AdbMessage? = AdbMessage()
+            incomingCommand?.let(::readHeader)
 
             while (true) {
                 if (!isActive) break
@@ -181,22 +181,22 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                 val receivedMessage = request.clientData as AdbMessage
                 request.clientData = null
                 var dispatchedMessage: AdbMessage? = null
-                if (receivedMessage === currentCommand) {
+                if (receivedMessage === incomingCommand) {
                     if (receivedMessage.hasPayload()) {
                         readPayload(receivedMessage)
-                        currentData = receivedMessage
+                        incomingData = receivedMessage
                     } else {
                         dispatchedMessage = receivedMessage
                     }
-                    currentCommand = null
-                } else if (receivedMessage === currentData) {
+                    incomingCommand = null
+                } else if (receivedMessage === incomingData) {
                     dispatchedMessage = receivedMessage
-                    currentData = null
+                    incomingData = null
                 }
 
                 if (dispatchedMessage != null) {
-                    currentCommand = AdbMessage()
-                    readHeader(currentCommand)
+                    incomingCommand = AdbMessage()
+                    readHeader(incomingCommand)
                     send(dispatchedMessage)
                 }
 

@@ -105,7 +105,6 @@ object Adb : AdbInterface {
         devices.values.forEach { it.close() }
     }
 
-    // TODO Call from aux thread
     override fun push(localPath: String, remotePath: String) {
         val device = devices.values.firstOrNull() ?: return
         device.sendFile(localPath, remotePath)
