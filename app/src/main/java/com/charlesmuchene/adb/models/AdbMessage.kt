@@ -67,12 +67,6 @@ class AdbMessage {
         get() {
             return if (dataLength <= 0 || dataLength > MESSAGE_PAYLOAD) null
             else {
-//                val builder = StringBuilder()
-//                builder.append(String(payload.array(), 0, 4))
-//                val byteArray = payload.array().copyOfRange(4, 8)
-//
-//                builder.append(String(payload.array(), 8, dataLength))
-//                builder.toString()
                 String(payload.array(), 0, dataLength)
             }
         }
@@ -275,7 +269,7 @@ class AdbMessage {
          * @param data Payload
          * @return [AdbMessage] instance
          */
-        fun generateWriteMessage(localId: Int, remoteId: Int, data: ByteArray): AdbMessage {
+        fun generateWriteMessage(localId: Int, remoteId: Int, data: ByteBuffer): AdbMessage {
             val message = AdbMessage()
             message[A_WRTE, localId, remoteId] = data
             return message
