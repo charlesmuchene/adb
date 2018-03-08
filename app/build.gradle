@@ -36,7 +36,7 @@ kotlin { experimental { coroutines 'enable' } }
 
 dependencies {
 
-    // Test deps
+    // Test
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "com.android.support.test:runner:$testRunnerVersion"
     androidTestImplementation "com.android.support.test.espresso:espresso-core:$espressoVersion"
@@ -53,5 +53,8 @@ dependencies {
 
     // Coroutine
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutineVersion"
+
+    // Things
+    compileOnly "com.google.android.things:androidthings:$thingsVersion"
 
 }
