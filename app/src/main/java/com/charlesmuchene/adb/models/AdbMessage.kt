@@ -285,6 +285,19 @@ class AdbMessage {
             return message
         }
 
+        /**
+         * Generate a quit message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         * @return [AdbMessage] instance
+         */
+        fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_QUIT, localId] = remoteId
+            return message
+        }
+
     }
 
 }

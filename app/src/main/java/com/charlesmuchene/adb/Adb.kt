@@ -21,6 +21,7 @@ import android.os.Environment
 import com.charlesmuchene.adb.interfaces.AdbProtocol
 import com.charlesmuchene.adb.models.AdbDevice
 import com.charlesmuchene.adb.utilities.getAdbInterface
+import kotlinx.coroutines.experimental.Job
 import java.io.File
 
 /**
@@ -105,15 +106,14 @@ object Adb : AdbProtocol {
         devices.values.forEach { it.close() }
     }
 
-    override fun push(localPath: String, remotePath: String) {
-        val device = devices.values.firstOrNull() ?: return // TODO Use specific device
-//        val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
-        device.push(localPath, remotePath)
+    override fun push(localPath: String, remotePath: String): Job {
+        val device = devices.values.first() // TODO Use specific device
+        return device.push(localPath, remotePath)
     }
 
-    override fun install(apkFilename: String, launch: Boolean) {
+    override fun install(apkPath: String, launch: Boolean) {
         val device = devices.values.firstOrNull() ?: return
-        device.install(apkFilename)
+        device.install(apkPath)
     }
 
 }

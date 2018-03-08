@@ -16,6 +16,7 @@
 package com.charlesmuchene.adb.interfaces
 
 import com.charlesmuchene.adb.models.AdbDevice
+import kotlinx.coroutines.experimental.Job
 
 /**
  * Adb interface.
@@ -29,14 +30,15 @@ interface AdbProtocol {
      *
      * @param localPath Path of the local file
      * @param remotePath Path of the remote file
+     * @return A coroutine [Job]
      */
-    fun push(localPath: String, remotePath: String)
+    fun push(localPath: String, remotePath: String): Job
 
     /**
      * Install an apk to the connected adb device
      *
-     * @param apkFilename Filename of the apk
+     * @param apkPath Absolute path for the apk
      * @param launch `true` to launch the apk otherwise just install
      */
-    fun install(apkFilename: String, launch: Boolean = false)
+    fun install(apkPath: String, launch: Boolean = false)
 }

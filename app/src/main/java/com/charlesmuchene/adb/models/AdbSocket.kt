@@ -36,13 +36,17 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
     private var remoteId: Int = -1
 
     companion object {
-        private const val tmpDir = "/data/local/tmp/"
+        const val tmpDir = "/data/local/tmp"
         private const val installCommand = "shell: pm install -g -t -r "
     }
 
-    private fun getInstallCommand(filename: String): String {
-        return "$installCommand \"$tmpDir$filename\""
-    }
+    /**
+     * Get the apk install command
+     *
+     * @param filename Filename of the apk
+     * @return Apk install shell command
+     */
+    private fun getInstallCommand(filename: String) = "$installCommand \"$tmpDir/$filename\""
 
     /**
      * Process to the message response
@@ -50,6 +54,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
      * @param message [AdbMessage] response
      */
     private fun processMessage(message: AdbMessage) {
+        logd("Processing: $message")
         when (message.command) {
             A_OKAY -> {
                 if (remoteId == -1) remoteId = message.argumentZero
@@ -57,10 +62,10 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
             A_WRTE -> {
                 val subCommand = message.getSubCommandAsString()
                 when (subCommand) {
-                    "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
-                    "DATA" -> logd(message.toString())
+                    "STAT" -> logd(message.getFileStat()?.toString() ?: subCommand)
+                    "DATA" -> logd("Sub-command: $subCommand")
                     "FAIL" -> sendClose()
-                    else -> Unit
+                    else -> logd("Sub-command: $subCommand")
                 }
                 sendOkay()
             }
@@ -75,7 +80,6 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
      */
     private fun close() {
         job.cancel()
-        channel.cancel()
         device.closeSocket(this)
     }
 
@@ -103,6 +107,13 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
     }
 
     /**
+     * Send quit message
+     */
+    private fun sendQuit() {
+        device.queueAdbMessage(AdbMessage.generateQuitMessage(localId, remoteId))
+    }
+
+    /**
      * Send buffer asynchronously
      *
      * @param buffer [ByteBuffer] to send
@@ -127,14 +138,14 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
      * @throws [InterruptedException] if there's any error sending file
      */
     @Throws(IllegalStateException::class, InterruptedException::class)
-    override fun push(localPath: String, remotePath: String) {
-        launch(parent = job) {
+    override fun push(localPath: String, remotePath: String): Job {
+        val pushJob = launch(parent = job) {
             val localFile = File(localPath)
             val localFilename = localFile.name
+            logd("Sending $localFilename...")
             val mode = 33188 // TODO Use actual local file permissions
             sendOpen("sync:")
             read()
-            logd("Sending $localFilename")
             val statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + remotePath.length)
                     .order(ByteOrder.LITTLE_ENDIAN)
                     .putInt(A_STAT)
@@ -158,11 +169,16 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
             }
             read()
             read()
+            read()
             sendClose()
             read()
-        }.invokeOnCompletion {
-            close()
         }
+
+        pushJob.invokeOnCompletion {
+            close()
+            logd("Done sending file")
+        }
+        return pushJob
     }
 
     /**
@@ -239,16 +255,22 @@ class AdbSocket(val localId: Int, private val device: AdbDevice,
         send(dataBuffer)
     }
 
-    override fun install(apkFilename: String, launch: Boolean) {
+    override fun install(apkPath: String, launch: Boolean) {
+        logd("Installing...")
         launch(parent = job) {
-            val command = getInstallCommand(apkFilename)
+            val file = File(apkPath)
+            val command = getInstallCommand(file.name)
             sendOpen(command)
             read()
             read()
             sendClose()
             read()
+
+            // TODO To launch, extract the fully qualified launcher activity name
+
         }.invokeOnCompletion {
             close()
+            logd("Done installing")
         }
     }
 }

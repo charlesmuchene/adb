@@ -26,7 +26,9 @@ import com.charlesmuchene.adb.utilities.*
 import kotlinx.coroutines.experimental.Job
 import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.launch
+import java.io.File
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Adb device
@@ -35,11 +37,11 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     : AdbProtocol {
 
     private val job = Job()
-    private var nextSocketId = 1
     private var isConnected = false
+    private var signatureSent = false
     private val inEndpoint: UsbEndpoint
     private val outEndpoint: UsbEndpoint
-    private var signatureSent = false
+    private var nextSocketId = AtomicInteger()
     private val channel by lazy { adbChannel() }
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
@@ -99,7 +101,6 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Close the adb device
      */
     fun close() {
-        assert(sockets.size() == 0) // TODO Find out why and perform close
         isConnected = false
         signatureSent = false
         job.cancel()
@@ -162,7 +163,8 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      */
     fun closeSocket(socket: AdbSocket) {
         sockets.remove(socket.localId)
-        nextSocketId--
+        if (nextSocketId.get() > 0)
+            nextSocketId.getAndDecrement()
     }
 
     /**
@@ -256,7 +258,9 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                 if (message.isDeviceOnline()) {
                     logd("Device is online")
                     isConnected = true
-                    install("app-debug.apk")
+                    val path = File(Adb.externalStorageLocation, "app-debug.apk").absolutePath
+                    install(path)
+//                    push(path, "sdcard")
                 } else {
                     isConnected = false
                     loge("Error performing device connection handshake ($message)")
@@ -265,17 +269,21 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         }
     }
 
-    override fun push(localPath: String, remotePath: String) {
-        val localId = nextSocketId++
+    override fun push(localPath: String, remotePath: String): Job {
+        val localId = nextSocketId.incrementAndGet()
         val socket = AdbSocket(localId, this, channel)
         sockets.put(localId, socket)
-        socket.push(localPath, remotePath)
+        return socket.push(localPath, remotePath)
     }
 
-    override fun install(apkFilename: String, launch: Boolean) {
-        val localId = nextSocketId++
-        val socket = AdbSocket(localId, this, channel)
-        sockets.put(localId, socket)
-        socket.install(apkFilename, launch)
+    override fun install(apkPath: String, launch: Boolean) {
+        launch {
+            push(apkPath, AdbSocket.tmpDir).join()
+        }.invokeOnCompletion {
+            val localId = nextSocketId.incrementAndGet()
+            val socket = AdbSocket(localId, this, channel)
+            sockets.put(localId, socket)
+            socket.install(apkPath, launch)
+        }
     }
 }
