@@ -51,7 +51,7 @@ class AdbMessage {
     /**
      * Argument one
      */
-    private val argumentOne: Int
+    val argumentOne: Int
         get() = header.getInt(8)
 
     /**
@@ -271,6 +271,30 @@ class AdbMessage {
         fun generateCloseMessage(localId: Int, remoteId: Int): AdbMessage {
             val message = AdbMessage()
             message[A_CLSE, localId] = remoteId
+            return message
+        }
+
+        /**
+         * Generate a sync message
+         *
+         * @return [AdbMessage] instance
+         */
+        fun generateSyncMessage(): AdbMessage {
+            val message = AdbMessage()
+            message[A_SYNC, 0] = 0
+            return message
+        }
+
+        /**
+         * Generate a quit message
+         *
+         * @param localId Local socket id
+         * @param remoteId Remote (peer) socket id
+         * @return [AdbMessage] instance
+         */
+        fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
+            val message = AdbMessage()
+            message[A_QUIT, localId] = remoteId
             return message
         }
 

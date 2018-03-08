@@ -18,15 +18,16 @@ package com.charlesmuchene.adb
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Environment
-import com.charlesmuchene.adb.interfaces.AdbInterface
+import com.charlesmuchene.adb.interfaces.AdbProtocol
 import com.charlesmuchene.adb.models.AdbDevice
 import com.charlesmuchene.adb.utilities.getAdbInterface
+import kotlinx.coroutines.experimental.Job
 import java.io.File
 
 /**
  * Adb utilities
  */
-object Adb : AdbInterface {
+object Adb : AdbProtocol {
 
     private lateinit var keyPath: String
     lateinit var externalStorageLocation: File
@@ -75,7 +76,7 @@ object Adb : AdbInterface {
         if (success) {
             val adbDevice = AdbDevice(usbInterface, connection)
             devices[device.deviceName] = adbDevice
-            adbDevice.connect()
+            adbDevice.initialize()
         } else {
             connection.close()
         }
@@ -105,14 +106,14 @@ object Adb : AdbInterface {
         devices.values.forEach { it.close() }
     }
 
-    override fun push(localPath: String, remotePath: String) {
-        val device = devices.values.firstOrNull() ?: return // TODO Use specific device
-//        val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
-        device.sendFile(localPath, remotePath)
+    override fun push(localPath: String, remotePath: String): Job {
+        val device = devices.values.first() // TODO Use specific device
+        return device.push(localPath, remotePath)
     }
 
-    override fun install(apkPath: String, install: Boolean) {
-        // TODO Add install implementation
+    override fun install(apkPath: String, launch: Boolean) {
+        val device = devices.values.firstOrNull() ?: return
+        device.install(apkPath)
     }
 
 }
