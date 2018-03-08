@@ -63,27 +63,52 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
     }
 
     /**
-     * Read adb message
-     *
-     * @return [AdbMessage] instance
+     * Reads and processes an adb message
+     * @throws [InterruptedException] instance in case there's an error
      */
-    private suspend fun read(): AdbMessage = device.messageReceiverChannel.receive()
+    @Throws(InterruptedException::class)
+    private suspend fun readResponseMessage() {
+        val message = device.messageReceiverChannel.receive()
+        when (message.command) {
+            A_OKAY -> {
+                if (remoteId != -1) remoteId = message.argumentZero
+            }
+            A_WRTE -> {
+                val subCommand = message.getSubCommandAsString()
+                when (subCommand) {
+                    "FAIL" -> {
+                        sendClose()
+                        throw InterruptedException("Protocol failed")
+                    }
+                    "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
+                    else -> Unit
+                }
+                sendOkay()
+            }
+            A_CLSE -> {
+                device.closeSocket(this)
+                throw InterruptedException("Forced to close socket")
+            }
+            else -> logw("Unexpected command: $message")
+        }
+    }
 
     /**
      * Send file to device
      *
      * @param localPath Local absolute path of file to send
      * @param remotePath Remote path of the destination file
+     * @throws [IllegalStateException] if the remote file path length is > 1024
+     * @throws [InterruptedException] if there's any error sending file
      */
+    @Throws(IllegalStateException::class, InterruptedException::class)
     fun sendFile(localPath: String, remotePath: String) {
         launch {
-            // TODO Make sending file robust using loop and reading writes from device
             val localFile = File(localPath)
             val localFilename = localFile.name
-            val mode = 33188 // TODO Use local file permissions
+            val mode = 33188 // TODO Use actual local file permissions
             sendOpen("sync:")
-            var responseMessage = read() ?: return@launch
-            remoteId = responseMessage.argumentZero
+            readResponseMessage()
 
             logd("Sending $localFilename")
             val statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + remotePath.length)
@@ -92,7 +117,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                     .putInt(remotePath.length)
                     .put(remotePath)
             send(statBuffer)
-            responseMessage = read() ?: return@launch
+            readResponseMessage()
 
             val pathAndMode = "$remotePath/$localFilename,$mode"
 
@@ -111,13 +136,11 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                 if (!successful) return@launch
             }
 
-            responseMessage = read() ?: return@launch
-            responseMessage = read() ?: return@launch
+            readResponseMessage()
+            readResponseMessage()
 
-            logd("File sent!")
             sendClose()
-            responseMessage = read() ?: return@launch
-            logd("Stream closed")
+            readResponseMessage()
         }.invokeOnCompletion {
             device.closeSocket(this@AdbSocket)
         }
@@ -141,7 +164,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                 .putInt(pathAndModeLength)
                 .put(pathAndMode)
         send(sendBuffer)
-        var responseMessage = read() ?: return false
+        readResponseMessage()
 
         stream.use { file ->
             var bytesCopied = 0
@@ -156,7 +179,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                         .put(dataArray, 0, bytesRead)
                 send(dataBuffer)
                 bytesCopied += bytesRead
-                responseMessage = read() ?: return false
+                readResponseMessage()
             }
             val transferred = 100 * bytesCopied / fileSize
             logd("Transferred $transferred% of the file")

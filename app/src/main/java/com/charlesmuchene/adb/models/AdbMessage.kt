@@ -92,18 +92,6 @@ class AdbMessage {
     }
 
     /**
-     * Get the message's total payload: header + payload
-     *
-     * @return [ByteArray] of the message's header and payload
-     */
-    fun asPayload(): ByteArray {
-        return when {
-            !hasPayload() -> header.array()
-            else -> header.array() + payload.array()
-        }
-    }
-
-    /**
      * Check if devices is online as reported back in this message
      *
      * @return `true` if device is online, `false` otherwise
@@ -193,6 +181,11 @@ class AdbMessage {
      */
     fun getFileStat(): FileStat? = if (hasPayload()) FileStat(payload) else null
 
+    /**
+     * Get sub-command as string
+     */
+    fun getSubCommandAsString() = dataPayloadAsString?.substring(0..3) ?: ""
+
     override fun toString(): String {
         val commandName = String(header.array(), 0, 4)
         var string = "Message: $commandName Arg0: $argumentZero Arg1: $argumentOne " +
@@ -278,29 +271,6 @@ class AdbMessage {
         fun generateCloseMessage(localId: Int, remoteId: Int): AdbMessage {
             val message = AdbMessage()
             message[A_CLSE, localId] = remoteId
-            return message
-        }
-
-        /**
-         * Generate a quit message
-         *
-         * @param localId Local socket id
-         * @param remoteId Remote (peer) socket id
-         */
-        fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
-            val message = AdbMessage()
-            message[A_QUIT, localId] = remoteId
-            return message
-        }
-
-        /**
-         * Generate a sync message
-         *
-         * @return [AdbMessage] instance
-         */
-        fun generateSyncMessage(): AdbMessage {
-            val message = AdbMessage()
-            message[A_SYNC, 0] = 0
             return message
         }
 
