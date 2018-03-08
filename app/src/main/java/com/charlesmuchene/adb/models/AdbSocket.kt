@@ -67,7 +67,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
      *
      * @return [AdbMessage] instance
      */
-    private suspend fun read(): AdbMessage? = device.adbMessageProducer.receive()
+    private suspend fun read(): AdbMessage = device.messageReceiverChannel.receive()
 
     /**
      * Send file to device
