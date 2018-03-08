@@ -51,7 +51,7 @@ class AdbMessage {
     /**
      * Argument one
      */
-    val argumentOne: Int
+    private val argumentOne: Int
         get() = header.getInt(8)
 
     /**
@@ -71,26 +71,6 @@ class AdbMessage {
             }
         }
 
-    constructor()
-
-    /**
-     * Constructor
-     *
-     * @param header [ByteBuffer] to construct the message with
-     */
-    constructor(header: ByteBuffer) {
-        this.header.put(header)
-    }
-
-    /**
-     * Add a payload to this message.
-     *
-     * @param payload [ByteBuffer] to add
-     */
-    fun addPayload(payload: ByteBuffer) {
-        header.put(payload)
-    }
-
     /**
      * Check if message has data payload
      *
@@ -108,18 +88,6 @@ class AdbMessage {
             !hasPayload() -> ByteArray(0)
             dataLength == MESSAGE_PAYLOAD -> payload.array()
             else -> payload.array().copyOfRange(0, dataLength)
-        }
-    }
-
-    /**
-     * Get the message's total payload: header + payload
-     *
-     * @return [ByteArray] of the message's header and payload
-     */
-    fun asPayload(): ByteArray {
-        return when {
-            !hasPayload() -> header.array()
-            else -> header.array() + payload.array()
         }
     }
 
@@ -213,6 +181,11 @@ class AdbMessage {
      */
     fun getFileStat(): FileStat? = if (hasPayload()) FileStat(payload) else null
 
+    /**
+     * Get sub-command as string
+     */
+    fun getSubCommandAsString() = dataPayloadAsString?.substring(0..3) ?: ""
+
     override fun toString(): String {
         val commandName = String(header.array(), 0, 4)
         var string = "Message: $commandName Arg0: $argumentZero Arg1: $argumentOne " +
@@ -298,29 +271,6 @@ class AdbMessage {
         fun generateCloseMessage(localId: Int, remoteId: Int): AdbMessage {
             val message = AdbMessage()
             message[A_CLSE, localId] = remoteId
-            return message
-        }
-
-        /**
-         * Generate a quit message
-         *
-         * @param localId Local socket id
-         * @param remoteId Remote (peer) socket id
-         */
-        fun generateQuitMessage(localId: Int, remoteId: Int): AdbMessage {
-            val message = AdbMessage()
-            message[A_QUIT, localId] = remoteId
-            return message
-        }
-
-        /**
-         * Generate a sync message
-         *
-         * @return [AdbMessage] instance
-         */
-        fun generateSyncMessage(): AdbMessage {
-            val message = AdbMessage()
-            message[A_SYNC, 0] = 0
             return message
         }
 

@@ -106,7 +106,8 @@ object Adb : AdbInterface {
     }
 
     override fun push(localPath: String, remotePath: String) {
-        val device = devices.values.firstOrNull() ?: return
+        val device = devices.values.firstOrNull() ?: return // TODO Use specific device
+//        val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
         device.sendFile(localPath, remotePath)
     }
 

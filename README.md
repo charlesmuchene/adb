@@ -14,10 +14,11 @@ Max payload for an Adb packet is `65,536` bytes but the app only supports a max 
 See:
 > drivers/usb/core/devio.c
 
-### Contribution
-Feel free to open issues or fork the project.
+### Contribution and releases
+---
+All development (both new features and bug fixes) is performed in develop branch. This way master sources always contain sources of the most recently released version. Please send PRs with bug fixes to develop branch
 
-Happy bridging :D
+The develop `branch` is pushed to `master` during release.
 
 ### License
 

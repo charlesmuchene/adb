@@ -18,6 +18,8 @@ package com.charlesmuchene.adb.models
 import com.charlesmuchene.adb.utilities.*
 import kotlinx.coroutines.experimental.launch
 import java.io.File
+import java.io.FileInputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -61,27 +63,52 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
     }
 
     /**
-     * Read adb message
-     *
-     * @return [AdbMessage] instance
+     * Reads and processes an adb message
+     * @throws [InterruptedException] instance in case there's an error
      */
-    private suspend fun read(): AdbMessage? = device.adbMessageProducer.receive()
+    @Throws(InterruptedException::class)
+    private suspend fun readResponseMessage() {
+        val message = device.messageReceiverChannel.receive()
+        when (message.command) {
+            A_OKAY -> {
+                if (remoteId != -1) remoteId = message.argumentZero
+            }
+            A_WRTE -> {
+                val subCommand = message.getSubCommandAsString()
+                when (subCommand) {
+                    "FAIL" -> {
+                        sendClose()
+                        throw InterruptedException("Protocol failed")
+                    }
+                    "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
+                    else -> Unit
+                }
+                sendOkay()
+            }
+            A_CLSE -> {
+                device.closeSocket(this)
+                throw InterruptedException("Forced to close socket")
+            }
+            else -> logw("Unexpected command: $message")
+        }
+    }
 
     /**
      * Send file to device
      *
      * @param localPath Local absolute path of file to send
      * @param remotePath Remote path of the destination file
+     * @throws [IllegalStateException] if the remote file path length is > 1024
+     * @throws [InterruptedException] if there's any error sending file
      */
+    @Throws(IllegalStateException::class, InterruptedException::class)
     fun sendFile(localPath: String, remotePath: String) {
         launch {
-            // TODO Make sending file robust using loop and reading writes from device
             val localFile = File(localPath)
             val localFilename = localFile.name
-            val mode = 33188 // TODO Use local file permissions
+            val mode = 33188 // TODO Use actual local file permissions
             sendOpen("sync:")
-            var responseMessage = read() ?: return@launch
-            remoteId = responseMessage.argumentZero
+            readResponseMessage()
 
             logd("Sending $localFilename")
             val statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + remotePath.length)
@@ -90,7 +117,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                     .putInt(remotePath.length)
                     .put(remotePath)
             send(statBuffer)
-            responseMessage = read() ?: return@launch
+            readResponseMessage()
 
             val pathAndMode = "$remotePath/$localFilename,$mode"
 
@@ -99,49 +126,100 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                 loge("The provided path is too long.")
                 throw IllegalStateException("Destination path is too long")
             }
-            val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
-                    .order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(A_SEND)
-                    .putInt(pathAndModeLength)
-                    .put(pathAndMode)
-            send(sendBuffer)
-            responseMessage = read() ?: return@launch
 
             val (lastModified, fileSize, stream) = openStream(localFile) ?: return@launch
-
-            stream.use { file ->
-                var bytesCopied = 0
-                val dataArray = ByteArray(MAX_BUFFER_LENGTH - SYNC_REQUEST_SIZE)
-                while (true) {
-                    val bytesRead = file.read(dataArray)
-                    if (bytesRead == -1) break
-                    val dataBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + bytesRead)
-                            .order(ByteOrder.LITTLE_ENDIAN)
-                            .putInt(A_DATA)
-                            .putInt(bytesRead)
-                            .put(dataArray, 0, bytesRead)
-                    send(dataBuffer)
-                    bytesCopied += bytesRead
-                    responseMessage = read() ?: return@launch
-                }
-                val transferred = 100 * bytesCopied / fileSize
-                logd("Transferred $transferred% of $localFilename to $remotePath")
+            val smallPayloadSize = 3 * SYNC_REQUEST_SIZE + fileSize + pathAndModeLength
+            if (smallPayloadSize <= MAX_BUFFER_LENGTH) {
+                sendSmallFile(pathAndMode, lastModified, fileSize, smallPayloadSize, stream)
+            } else {
+                val successful = sendLargeFile(pathAndMode, lastModified, fileSize, stream)
+                if (!successful) return@launch
             }
 
-            val doneBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE)
-                    .order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(A_DONE)
-                    .putInt(lastModified)
-            send(doneBuffer)
-            responseMessage = read() ?: return@launch
-            responseMessage = read() ?: return@launch
+            readResponseMessage()
+            readResponseMessage()
 
-            logd("File sent!")
             sendClose()
-            responseMessage = read() ?: return@launch
-            logd("Stream closed")
+            readResponseMessage()
         }.invokeOnCompletion {
             device.closeSocket(this@AdbSocket)
         }
+    }
+
+    /**
+     * Send a large file
+     *
+     * @param pathAndMode The combination of the remote path and mode
+     * @param lastModified Timestamp of the last modified time of the copied file
+     * @param fileSize Size of the local file
+     * @param stream [FileInputStream] of the local file
+     * @return `true` if sending file was successful `false` otherwise
+     */
+    private suspend fun sendLargeFile(pathAndMode: String, lastModified: Int, fileSize: Int,
+                                      stream: FileInputStream): Boolean {
+        val pathAndModeLength = pathAndMode.length
+        val sendBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + pathAndModeLength)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(A_SEND)
+                .putInt(pathAndModeLength)
+                .put(pathAndMode)
+        send(sendBuffer)
+        readResponseMessage()
+
+        stream.use { file ->
+            var bytesCopied = 0
+            val dataArray = ByteArray(MAX_BUFFER_LENGTH - SYNC_REQUEST_SIZE)
+            while (true) {
+                val bytesRead = file.read(dataArray)
+                if (bytesRead == -1) break
+                val dataBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + bytesRead)
+                        .order(ByteOrder.LITTLE_ENDIAN)
+                        .putInt(A_DATA)
+                        .putInt(bytesRead)
+                        .put(dataArray, 0, bytesRead)
+                send(dataBuffer)
+                bytesCopied += bytesRead
+                readResponseMessage()
+            }
+            val transferred = 100 * bytesCopied / fileSize
+            logd("Transferred $transferred% of the file")
+        }
+
+        val doneBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(A_DONE)
+                .putInt(lastModified)
+        send(doneBuffer)
+
+        return true
+    }
+
+    /**
+     * Send a small payload file. Adb implementation recommends to combine header and
+     * payload in the send buffer for a small file as it is efficient.
+     *
+     * @param pathAndMode The combination of the remote path and mode
+     * @param lastModified Timestamp of the last modified time of the copied file
+     * @param fileSize Size of the local file
+     * @param bufferSize Size of the payload buffer
+     * @param stream [FileInputStream] of the local file
+     */
+    @Throws(IOException::class)
+    private fun sendSmallFile(pathAndMode: String, lastModified: Int, fileSize: Int,
+                              bufferSize: Int, stream: FileInputStream) {
+        val data = ByteArray(fileSize)
+        stream.use { it.read(data) }
+        val pathAndModeLength = pathAndMode.length
+        val dataBuffer = ByteBuffer.allocate(bufferSize)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(A_SEND)
+                .putInt(pathAndModeLength)
+                .put(pathAndMode)
+                .putInt(A_DATA)
+                .putInt(fileSize)
+                .put(data)
+                .putInt(A_DONE)
+                .putInt(lastModified)
+        send(dataBuffer)
     }
 }
