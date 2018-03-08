@@ -21,8 +21,9 @@ import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbRequest
 import android.util.SparseArray
 import com.charlesmuchene.adb.Adb
+import com.charlesmuchene.adb.interfaces.AdbProtocol
 import com.charlesmuchene.adb.utilities.*
-import kotlinx.coroutines.experimental.channels.consumeEach
+import kotlinx.coroutines.experimental.Job
 import kotlinx.coroutines.experimental.channels.produce
 import kotlinx.coroutines.experimental.launch
 import java.util.*
@@ -30,13 +31,16 @@ import java.util.*
 /**
  * Adb device
  */
-class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDeviceConnection) {
+class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDeviceConnection)
+    : AdbProtocol {
 
+    private val job = Job()
     private var nextSocketId = 1
     private var isConnected = false
     private val inEndpoint: UsbEndpoint
     private val outEndpoint: UsbEndpoint
     private var signatureSent = false
+    private val channel by lazy { adbChannel() }
     private val inRequestPool = LinkedList<UsbRequest>()
     private val outRequestPool = LinkedList<UsbRequest>()
 
@@ -58,11 +62,6 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * An array of open sockets on this device
      */
     private val sockets = SparseArray<AdbSocket>()
-
-    /**
-     * Adb message receiver channel
-     */
-    val adbMessageReceiverChannel by lazy { readAdbMessage() }
 
     init {
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
@@ -103,7 +102,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         assert(sockets.size() == 0) // TODO Find out why and perform close
         isConnected = false
         signatureSent = false
-        adbMessageReceiverChannel.cancel()
+        job.cancel()
         connection.releaseInterface(usbInterface)
         connection.close()
     }
@@ -167,11 +166,11 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     }
 
     /**
-     * Query for an adb message asynchronously
+     * Create a channel to receive [AdbMessage]
      *
-     * @return A producer of adb messages
+     * @return A channel to receive adb messages
      */
-    private fun readAdbMessage() = produce<AdbMessage> {
+    private fun adbChannel() = produce<AdbMessage> {
         var incomingData: AdbMessage? = null
         var incomingCommand: AdbMessage? = AdbMessage()
         incomingCommand?.let(::readHeader)
@@ -213,15 +212,20 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      * Initialize ADB connection. This invocation starts a coroutine to read
      * messages from device.
      */
-    @Throws(IllegalStateException::class)
     fun initialize() {
-        launch {
-            adbMessageReceiverChannel.consumeEach { message ->
-                loge("Working on $message")
+        launch(parent = job) {
+            while (!isConnected) {
+                val message = channel.receive()
                 when (message.command) {
                     A_AUTH, A_CNXN -> authenticate(message)
-                    A_OKAY, A_CLSE, A_WRTE, A_OPEN -> consumeMessage(message)
-                    else -> loge("We are in trouble :D -> $message")
+                    A_CLSE -> {
+                        sockets.get(message.argumentOne)?.let(::closeSocket)
+                        logw("Closed dangling socket in authentication")
+                    }
+                    else -> {
+                        loge("Unexpected message: -> $message")
+                        queueAdbMessage(AdbMessage.generateSyncMessage())
+                    }
                 }
             }
         }
@@ -252,7 +256,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
                 if (message.isDeviceOnline()) {
                     logd("Device is online")
                     isConnected = true
-                    installer()
+                    install("app-debug.apk")
                 } else {
                     isConnected = false
                     loge("Error performing device connection handshake ($message)")
@@ -261,38 +265,17 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         }
     }
 
-    /**
-     * Process the device message response
-     *
-     * @param message [AdbMessage] from device
-     */
-    private fun consumeMessage(message: AdbMessage) {
-        sockets.get(message.argumentOne)?.processMessage(message)
-    }
-
-    /**
-     * Send a file
-     *
-     * @param localPath Local absolute file path
-     * @param remotePath Remote absolute file path
-     */
-    fun sendFile(localPath: String, remotePath: String = "sdcard") {
+    override fun push(localPath: String, remotePath: String) {
         val localId = nextSocketId++
-        val socket = AdbSocket(localId, this)
+        val socket = AdbSocket(localId, this, channel)
         sockets.put(localId, socket)
-        socket.sendFile(localPath, remotePath)
+        socket.push(localPath, remotePath)
     }
 
-    fun installer() {
-        try {
-            loge("Installing")
-            val localId = nextSocketId++
-            val socket = AdbSocket(localId, this)
-            sockets.put(localId, socket)
-            queueAdbMessage(AdbMessage.generateOpenMessage(localId, "shell: ls"))
-//            socket.installApk()
-        } catch (e: Exception) {
-            loge(e.localizedMessage)
-        }
+    override fun install(apkFilename: String, launch: Boolean) {
+        val localId = nextSocketId++
+        val socket = AdbSocket(localId, this, channel)
+        sockets.put(localId, socket)
+        socket.install(apkFilename, launch)
     }
 }

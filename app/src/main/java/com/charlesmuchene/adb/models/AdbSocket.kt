@@ -15,7 +15,10 @@
 
 package com.charlesmuchene.adb.models
 
+import com.charlesmuchene.adb.interfaces.AdbProtocol
 import com.charlesmuchene.adb.utilities.*
+import kotlinx.coroutines.experimental.Job
+import kotlinx.coroutines.experimental.channels.ReceiveChannel
 import kotlinx.coroutines.experimental.launch
 import java.io.File
 import java.io.FileInputStream
@@ -26,36 +29,54 @@ import java.nio.ByteOrder
 /**
  * Adb Socket
  */
-class AdbSocket(val localId: Int, private val device: AdbDevice) {
+class AdbSocket(val localId: Int, private val device: AdbDevice,
+                private val channel: ReceiveChannel<AdbMessage>) : AdbProtocol {
 
+    private val job = Job()
     private var remoteId: Int = -1
+
+    companion object {
+        private const val tmpDir = "/data/local/tmp/"
+        private const val installCommand = "shell: pm install -g -t -r "
+    }
+
+    private fun getInstallCommand(filename: String): String {
+        return "$installCommand \"$tmpDir$filename\""
+    }
 
     /**
      * Process to the message response
      *
      * @param message [AdbMessage] response
      */
-    fun processMessage(message: AdbMessage) {
+    private fun processMessage(message: AdbMessage) {
         when (message.command) {
             A_OKAY -> {
-                if (remoteId != -1) remoteId = message.argumentZero
+                if (remoteId == -1) remoteId = message.argumentZero
             }
             A_WRTE -> {
                 val subCommand = message.getSubCommandAsString()
                 when (subCommand) {
-                    "FAIL" -> {
-                        sendClose()
-                        throw InterruptedException("Protocol failed")
-                    }
                     "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
+                    "DATA" -> logd(message.toString())
+                    "FAIL" -> sendClose()
                     else -> Unit
                 }
                 sendOkay()
             }
-            A_CLSE -> device.closeSocket(this)
-            
+            A_CLSE -> close()
+
             else -> logw("Unexpected command: $message")
         }
+    }
+
+    /**
+     * Close the socket
+     */
+    private fun close() {
+        job.cancel()
+        channel.cancel()
+        device.closeSocket(this)
     }
 
     /**
@@ -91,39 +112,10 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
     }
 
     /**
-     * Reads and processes an adb message
-     * @throws [InterruptedException] instance in case there's an error
+     * Read and process the next adb message
      */
-    @Throws(InterruptedException::class)
-    private suspend fun readResponseMessage() {
-        try {
-            val message = device.adbMessageReceiverChannel.receive()
-            logd("Response $message")
-            when (message.command) {
-                A_OKAY -> {
-                    if (remoteId != -1) remoteId = message.argumentZero
-                }
-                A_WRTE -> {
-                    val subCommand = message.getSubCommandAsString()
-                    when (subCommand) {
-                        "FAIL" -> {
-                            sendClose()
-                            throw InterruptedException("Protocol failed")
-                        }
-                        "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
-                        else -> Unit
-                    }
-                    sendOkay()
-                }
-                A_CLSE -> {
-                    device.closeSocket(this)
-                    throw InterruptedException("Forced to close socket")
-                }
-                else -> logw("Unexpected command: $message")
-            }
-        } catch (e: Exception) {
-            loge(e.localizedMessage)
-        }
+    private suspend fun read() {
+        processMessage(channel.receive())
     }
 
     /**
@@ -135,14 +127,13 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
      * @throws [InterruptedException] if there's any error sending file
      */
     @Throws(IllegalStateException::class, InterruptedException::class)
-    fun sendFile(localPath: String, remotePath: String) {
-        launch {
+    override fun push(localPath: String, remotePath: String) {
+        launch(parent = job) {
             val localFile = File(localPath)
             val localFilename = localFile.name
             val mode = 33188 // TODO Use actual local file permissions
             sendOpen("sync:")
-            readResponseMessage()
-
+            read()
             logd("Sending $localFilename")
             val statBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE + remotePath.length)
                     .order(ByteOrder.LITTLE_ENDIAN)
@@ -150,16 +141,13 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                     .putInt(remotePath.length)
                     .put(remotePath)
             send(statBuffer)
-            readResponseMessage()
-
+            read()
             val pathAndMode = "$remotePath/$localFilename,$mode"
-
             val pathAndModeLength = pathAndMode.length
             if (pathAndModeLength > MAX_PATH_LENGTH) {
                 loge("The provided path is too long.")
                 throw IllegalStateException("Destination path is too long")
             }
-
             val (lastModified, fileSize, stream) = openStream(localFile) ?: return@launch
             val smallPayloadSize = 3 * SYNC_REQUEST_SIZE + fileSize + pathAndModeLength
             if (smallPayloadSize <= MAX_BUFFER_LENGTH) {
@@ -168,14 +156,12 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                 val successful = sendLargeFile(pathAndMode, lastModified, fileSize, stream)
                 if (!successful) return@launch
             }
-
-            readResponseMessage()
-            readResponseMessage()
-
+            read()
+            read()
             sendClose()
-            readResponseMessage()
+            read()
         }.invokeOnCompletion {
-            device.closeSocket(this@AdbSocket)
+            close()
         }
     }
 
@@ -197,8 +183,7 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                 .putInt(pathAndModeLength)
                 .put(pathAndMode)
         send(sendBuffer)
-        readResponseMessage()
-
+        read()
         stream.use { file ->
             var bytesCopied = 0
             val dataArray = ByteArray(MAX_BUFFER_LENGTH - SYNC_REQUEST_SIZE)
@@ -212,18 +197,16 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                         .put(dataArray, 0, bytesRead)
                 send(dataBuffer)
                 bytesCopied += bytesRead
-                readResponseMessage()
+                read()
             }
             val transferred = 100 * bytesCopied / fileSize
             logd("Transferred $transferred% of the file")
         }
-
         val doneBuffer = ByteBuffer.allocate(SYNC_REQUEST_SIZE)
                 .order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(A_DONE)
                 .putInt(lastModified)
         send(doneBuffer)
-
         return true
     }
 
@@ -256,17 +239,16 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
         send(dataBuffer)
     }
 
-    /**
-     * Install apk
-     */
-    fun installApk() {
-        try {
-            sendOpen("shell: ls")
-//            readResponseMessage()
-//            sendClose()
-//            readResponseMessage()
-        } catch (e: Exception) {
-            loge(e.localizedMessage)
+    override fun install(apkFilename: String, launch: Boolean) {
+        launch(parent = job) {
+            val command = getInstallCommand(apkFilename)
+            sendOpen(command)
+            read()
+            read()
+            sendClose()
+            read()
+        }.invokeOnCompletion {
+            close()
         }
     }
 }

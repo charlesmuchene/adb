@@ -22,7 +22,7 @@ import com.charlesmuchene.adb.models.AdbDevice
  *
  * Defines adb 'actions' that an [AdbDevice] can perform
  */
-interface AdbInterface {
+interface AdbProtocol {
 
     /**
      * Push a file to connect adb device
@@ -35,8 +35,8 @@ interface AdbInterface {
     /**
      * Install an apk to the connected adb device
      *
-     * @param apkPath Path of the apk on the host
-     * @param install `true` to install the apk otherwise just install
+     * @param apkFilename Filename of the apk
+     * @param launch `true` to launch the apk otherwise just install
      */
-    fun install(apkPath: String, install: Boolean)
+    fun install(apkFilename: String, launch: Boolean = false)
 }
