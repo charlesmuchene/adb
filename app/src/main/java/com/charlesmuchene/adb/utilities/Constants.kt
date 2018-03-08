@@ -53,6 +53,11 @@ const val MAX_PATH_LENGTH = 1_024
 const val SYNC_REQUEST_SIZE = 8
 
 /**
+ * Request timeout
+ */
+const val ADB_REQUEST_TIMEOUT = 10_000L
+
+/**
  * Adb sync request constants
  */
 const val A_SYNC = 0x434e5953

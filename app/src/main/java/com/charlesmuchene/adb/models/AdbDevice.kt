@@ -22,10 +22,8 @@ import android.hardware.usb.UsbRequest
 import android.util.SparseArray
 import com.charlesmuchene.adb.Adb
 import com.charlesmuchene.adb.utilities.*
-import kotlinx.coroutines.experimental.cancel
 import kotlinx.coroutines.experimental.channels.consumeEach
 import kotlinx.coroutines.experimental.channels.produce
-import kotlinx.coroutines.experimental.channels.takeWhile
 import kotlinx.coroutines.experimental.launch
 import java.util.*
 
@@ -64,7 +62,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     /**
      * Adb message receiver channel
      */
-    val messageReceiverChannel by lazy { readAdbMessage() }
+    val adbMessageReceiverChannel by lazy { readAdbMessage() }
 
     init {
         val (inEp, outEp) = usbInterface.getBulkEndpoints()
@@ -105,7 +103,7 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
         assert(sockets.size() == 0) // TODO Find out why and perform close
         isConnected = false
         signatureSent = false
-        messageReceiverChannel.cancel()
+        adbMessageReceiverChannel.cancel()
         connection.releaseInterface(usbInterface)
         connection.close()
     }
@@ -212,46 +210,64 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
     }
 
     /**
-     * Connect to the device. This performs the ADB Protocol connection
-     * handshake.
+     * Initialize ADB connection. This invocation starts a coroutine to read
+     * messages from device.
      */
     @Throws(IllegalStateException::class)
-    fun connect() {
+    fun initialize() {
         launch {
-            messageReceiverChannel
-                    .takeWhile { _ -> !isConnected }
-                    .consumeEach { message ->
-                        when (message.command) {
-                            A_AUTH -> {
-                                val (type, payload) = if (signatureSent) {
-                                    val publicKey = Adb.getPublicKey()
-                                    Pair(RSAPUBLICKEY, publicKey)
-                                } else {
-                                    signatureSent = true
-                                    val token = message.getPayload()
-                                    val signature = Adb.signToken(token)
-                                    Pair(SIGNATURE, signature)
-                                }
-                                queueAdbMessage(AdbMessage.generateAuthMessage(type, payload))
-                            }
-
-                            A_CNXN -> {
-                                if (message.isDeviceOnline()) {
-                                    logd("Device is online")
-                                    isConnected = true
-                                    coroutineContext.cancel() // Why is launch not completing?
-                                } else {
-                                    isConnected = false
-                                    loge("Error performing device connection handshake ($message)")
-                                }
-                            }
-
-                            else ->
-                                loge("We are in trouble $message")
-                        }
-                    }
+            adbMessageReceiverChannel.consumeEach { message ->
+                loge("Working on $message")
+                when (message.command) {
+                    A_AUTH, A_CNXN -> authenticate(message)
+                    A_OKAY, A_CLSE, A_WRTE, A_OPEN -> consumeMessage(message)
+                    else -> loge("We are in trouble :D -> $message")
+                }
+            }
         }
         queueAdbMessage(AdbMessage.generateConnectMessage())
+    }
+
+    /**
+     * Perform device authentication
+     *
+     * @param message [AdbMessage] with authentication payload
+     */
+    private fun authenticate(message: AdbMessage) {
+        when (message.command) {
+            A_AUTH -> {
+                val (type, payload) = if (signatureSent) {
+                    val publicKey = Adb.getPublicKey()
+                    Pair(RSAPUBLICKEY, publicKey)
+                } else {
+                    signatureSent = true
+                    val token = message.getPayload()
+                    val signature = Adb.signToken(token)
+                    Pair(SIGNATURE, signature)
+                }
+                queueAdbMessage(AdbMessage.generateAuthMessage(type, payload))
+            }
+
+            A_CNXN -> {
+                if (message.isDeviceOnline()) {
+                    logd("Device is online")
+                    isConnected = true
+                    installer()
+                } else {
+                    isConnected = false
+                    loge("Error performing device connection handshake ($message)")
+                }
+            }
+        }
+    }
+
+    /**
+     * Process the device message response
+     *
+     * @param message [AdbMessage] from device
+     */
+    private fun consumeMessage(message: AdbMessage) {
+        sockets.get(message.argumentOne)?.processMessage(message)
     }
 
     /**
@@ -262,9 +278,21 @@ class AdbDevice(private val usbInterface: UsbInterface, val connection: UsbDevic
      */
     fun sendFile(localPath: String, remotePath: String = "sdcard") {
         val localId = nextSocketId++
-        val socket = AdbSocket(localId, this@AdbDevice)
+        val socket = AdbSocket(localId, this)
         sockets.put(localId, socket)
         socket.sendFile(localPath, remotePath)
     }
-    
+
+    fun installer() {
+        try {
+            loge("Installing")
+            val localId = nextSocketId++
+            val socket = AdbSocket(localId, this)
+            sockets.put(localId, socket)
+            queueAdbMessage(AdbMessage.generateOpenMessage(localId, "shell: ls"))
+//            socket.installApk()
+        } catch (e: Exception) {
+            loge(e.localizedMessage)
+        }
+    }
 }

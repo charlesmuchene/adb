@@ -75,7 +75,7 @@ object Adb : AdbInterface {
         if (success) {
             val adbDevice = AdbDevice(usbInterface, connection)
             devices[device.deviceName] = adbDevice
-            adbDevice.connect()
+            adbDevice.initialize()
         } else {
             connection.close()
         }
@@ -106,9 +106,9 @@ object Adb : AdbInterface {
     }
 
     override fun push(localPath: String, remotePath: String) {
-        val device = devices.values.firstOrNull() ?: return // TODO Use specific device
+//        val device = devices.values.firstOrNull() ?: return // TODO Use specific device
 //        val localPath = File(Adb.externalStorageLocation, localFilename).absolutePath
-        device.sendFile(localPath, remotePath)
+//        device.sendFile(localPath, remotePath)
     }
 
     override fun install(apkPath: String, install: Boolean) {

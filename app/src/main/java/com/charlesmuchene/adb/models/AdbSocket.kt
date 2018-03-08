@@ -31,6 +31,34 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
     private var remoteId: Int = -1
 
     /**
+     * Process to the message response
+     *
+     * @param message [AdbMessage] response
+     */
+    fun processMessage(message: AdbMessage) {
+        when (message.command) {
+            A_OKAY -> {
+                if (remoteId != -1) remoteId = message.argumentZero
+            }
+            A_WRTE -> {
+                val subCommand = message.getSubCommandAsString()
+                when (subCommand) {
+                    "FAIL" -> {
+                        sendClose()
+                        throw InterruptedException("Protocol failed")
+                    }
+                    "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
+                    else -> Unit
+                }
+                sendOkay()
+            }
+            A_CLSE -> device.closeSocket(this)
+            
+            else -> logw("Unexpected command: $message")
+        }
+    }
+
+    /**
      * Send open with the given command
      *
      * @param command command to send
@@ -68,28 +96,33 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
      */
     @Throws(InterruptedException::class)
     private suspend fun readResponseMessage() {
-        val message = device.messageReceiverChannel.receive()
-        when (message.command) {
-            A_OKAY -> {
-                if (remoteId != -1) remoteId = message.argumentZero
-            }
-            A_WRTE -> {
-                val subCommand = message.getSubCommandAsString()
-                when (subCommand) {
-                    "FAIL" -> {
-                        sendClose()
-                        throw InterruptedException("Protocol failed")
-                    }
-                    "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
-                    else -> Unit
+        try {
+            val message = device.adbMessageReceiverChannel.receive()
+            logd("Response $message")
+            when (message.command) {
+                A_OKAY -> {
+                    if (remoteId != -1) remoteId = message.argumentZero
                 }
-                sendOkay()
+                A_WRTE -> {
+                    val subCommand = message.getSubCommandAsString()
+                    when (subCommand) {
+                        "FAIL" -> {
+                            sendClose()
+                            throw InterruptedException("Protocol failed")
+                        }
+                        "STAT" -> logd(message.getFileStat()?.toString() ?: message.toString())
+                        else -> Unit
+                    }
+                    sendOkay()
+                }
+                A_CLSE -> {
+                    device.closeSocket(this)
+                    throw InterruptedException("Forced to close socket")
+                }
+                else -> logw("Unexpected command: $message")
             }
-            A_CLSE -> {
-                device.closeSocket(this)
-                throw InterruptedException("Forced to close socket")
-            }
-            else -> logw("Unexpected command: $message")
+        } catch (e: Exception) {
+            loge(e.localizedMessage)
         }
     }
 
@@ -221,5 +254,19 @@ class AdbSocket(val localId: Int, private val device: AdbDevice) {
                 .putInt(A_DONE)
                 .putInt(lastModified)
         send(dataBuffer)
+    }
+
+    /**
+     * Install apk
+     */
+    fun installApk() {
+        try {
+            sendOpen("shell: ls")
+//            readResponseMessage()
+//            sendClose()
+//            readResponseMessage()
+        } catch (e: Exception) {
+            loge(e.localizedMessage)
+        }
     }
 }
