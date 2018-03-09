@@ -19,9 +19,9 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
+import com.charlesmuchene.adb.Adb
 import com.charlesmuchene.adb.R
 import com.charlesmuchene.adb.receivers.UsbConnectionReceiver
-import com.charlesmuchene.adb.Adb
 
 /**
  * Home screen
