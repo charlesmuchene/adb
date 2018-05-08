@@ -33,5 +33,5 @@ ext {
     testRunnerVersion = '1.0.1'
     constraintVersion = '1.1.0'
     supportLibVersion = '27.1.1'
-    thingsVersion = '0.8-devpreview'
+    thingsVersion = '1.0'
 }
